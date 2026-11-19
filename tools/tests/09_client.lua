@@ -213,6 +213,103 @@ return function(requireModule, phase)
 			expect(ok).toBe(true)
 		end)
 
+		it("only shows the flight layer to a touch-device pilot", function()
+			local UIS = game:GetService("UserInputService")
+			local player = game:GetService("Players").LocalPlayer
+			if not player then
+				player = __RUNTIME.createPlayer(__EMU.newVector3, __EMU.newCFrame, { name = "Local", position = __EMU.newVector3(0, 5, 0) })
+				game:GetService("Players").LocalPlayer = player
+			end
+			local mine = { pilotUserId = player.UserId }
+			local theirs = { pilotUserId = player.UserId + 1 }
+
+			UIS.TouchEnabled = true
+			UIS.KeyboardEnabled = false -- a real phone, not a hybrid laptop
+			TouchControls.refreshFromState(mine)
+			expect(TouchControls.isVisible()).toBe(true)
+			TouchControls.refreshFromState(theirs)
+			expect(TouchControls.isVisible()).toBe(false)
+			TouchControls.refreshFromState(nil)
+			expect(TouchControls.isVisible()).toBe(false)
+
+			-- Keyboard players never get the on-screen joystick.
+			UIS.KeyboardEnabled = true
+			UIS.TouchEnabled = false
+			TouchControls.refreshFromState(mine)
+			expect(TouchControls.isVisible()).toBe(false)
+			UIS.TouchEnabled = true
+			UIS.KeyboardEnabled = false
+		end)
+
+		it("turns a touch steering gesture into real flight axes", function()
+			local InputController = load("StarterPlayer/StarterPlayerScripts/Controllers/InputController")
+			local UIS = game:GetService("UserInputService")
+			UIS.TouchEnabled = true
+			UIS.KeyboardEnabled = false
+
+			-- Right and down: yaw right, nose down, brake engaged at the stop.
+			TouchControls.steer(1, 1)
+			local axes = InputController.getAxes()
+			expect(axes.yaw).toBe(1)
+			expect(axes.pitch).toBe(1)
+			expect(axes.brake).toBe(true)
+
+			-- Half deflection is pitch only, never a brake.
+			TouchControls.steer(-0.5, 0.4)
+			axes = InputController.getAxes()
+			expect(axes.yaw).toBe(-0.5)
+			expect(axes.brake).toBe(false)
+
+			-- Throttle comes from the joystick's vertical axis.
+			TouchControls.setThrottle(0.75)
+			axes = InputController.getAxes()
+			expect(axes.throttle).toBe(0.75)
+
+			-- Releasing everything must not leave the ship stuck accelerating.
+			TouchControls.setVisible(false)
+			axes = InputController.getAxes()
+			expect(axes.throttle).toBe(0)
+			expect(axes.yaw).toBe(0)
+			expect(axes.pitch).toBe(0)
+			expect(axes.brake).toBe(false)
+
+			UIS.KeyboardEnabled = true
+		end)
+
+		it("maps the physical gamepad to the same axes", function()
+			local InputController = load("StarterPlayer/StarterPlayerScripts/Controllers/InputController")
+			local UIS = game:GetService("UserInputService")
+			local function v3(x, y, z)
+				return __EMU.newVector3(x, y, z)
+			end
+			local original = UIS.GetGamepadState
+			UIS.GetGamepadState = function()
+				return {
+					{ KeyCode = Enum.KeyCode.Thumbstick1, Position = v3(0.9, -0.8, 0) },
+					{ KeyCode = Enum.KeyCode.Thumbstick2, Position = v3(0.5, 0.5, 0) },
+					{ KeyCode = Enum.KeyCode.ButtonX, Position = v3(0, 0, 1) },
+				}
+			end
+			InputController.readGamepad()
+			local axes = InputController.getAxes()
+			-- Stick pushed forward and right, held past the deadzone.
+			expect(axes.throttle > 0.5).toBe(true)
+			expect(axes.strafe > 0.5).toBe(true)
+			expect(axes.yaw < 0).toBe(true) -- right stick right = yaw right
+			expect(axes.pitch > 0).toBe(true)
+			expect(axes.brake).toBe(true) -- face button held
+
+			-- An unplugged pad must fall back to level flight, not stale input.
+			UIS.GetGamepadState = function()
+				return nil
+			end
+			InputController.readGamepad()
+			axes = InputController.getAxes()
+			expect(axes.throttle).toBe(0)
+			expect(axes.brake).toBe(false)
+			UIS.GetGamepadState = original
+		end)
+
 		it("opens and closes every modal panel without error", function()
 			local openers = {
 				{ name = "Chart", fn = function()
@@ -262,6 +359,40 @@ return function(requireModule, phase)
 			end)
 			expect(ok).toBe(true)
 			ScannerPanel.hide()
+		end)
+
+		it("routes every HUD action-bar button to a callback", function()
+			local fired = {}
+			local expected = { "Scan", "Chart", "Workshop", "Catalog", "Stand", "Settings" }
+			for _, name in ipairs(expected) do
+				HUD.onAction(name, function()
+					fired[name] = true
+				end)
+			end
+
+			local hudRoot
+			for _, child in ipairs(playerGui:GetChildren()) do
+				if child.Name == "SpaceHUD" then
+					hudRoot = child
+				end
+			end
+			expect(hudRoot ~= nil).toBe(true)
+			local bar = hudRoot:FindFirstChild("ActionBar", true)
+			expect(bar ~= nil).toBe(true)
+
+			local buttons = 0
+			for _, child in ipairs(bar:GetChildren()) do
+				if child:IsA("TextButton") then
+					buttons += 1
+					-- `Activated` is a signal: fire() it, do not call it.
+					child.Activated:Fire()
+				end
+			end
+			expect(buttons).toBe(6)
+			-- Every button fired exactly the action it advertises.
+			for _, name in ipairs(expected) do
+				expect(fired[name]).toBe(true)
+			end
 		end)
 
 		it("only ever has one modal open at a time", function()

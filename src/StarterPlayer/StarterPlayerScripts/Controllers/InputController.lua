@@ -4,12 +4,15 @@
 
 	Design
 	------
-	* Desktop:  W/S throttle, A/D yaw, Q/E strafe, Space/Ctrl lift, F brake,
-	            E toggles hatch/seat, Tab chart, I inventory, B workshop.
-	* Gamepad:  Thumbstick steer (L3 boost), D-pad L/R yaw, R2/L2 lift,
-	            ButtonX brake, ButtonY interact.
-	* Touch:    on-screen joystick + thumbbuttons created by TouchControls; the
-	            same axes are fed into the flight model, so no keyboard is needed.
+	* Desktop:  W/S throttle, A/D strafe, Left/Right yaw, Up/Down pitch,
+	            Space/LeftCtrl lift, F brake. E is context sensitive (seat,
+	            hatch, prompt), X stands up from the pilot seat, Tab chart,
+	            I inventory, B workshop, R scan, L launch, K descend, G gear.
+	* Gamepad:  Left stick throttle + strafe, right stick yaw + pitch,
+	            R2/L2 lift, ButtonX is both brake (flight) and stand (on foot),
+	            ButtonY interact, R1 scan, L1 chart, D-pad up/down launch/land.
+	* Touch:    on-screen joystick + steering pad + buttons from TouchControls;
+	            the same axes feed the flight model, so no keyboard is needed.
 
 	Everything funnels into a single `axes` table that the flight controller
 	publishes to the server. No input produces a gameplay result locally.
@@ -36,10 +39,10 @@ local touchAxes: Axes = { throttle = 0, strafe = 0, lift = 0, yaw = 0, pitch = 0
 local gamepadAxes: Axes = { throttle = 0, strafe = 0, lift = 0, yaw = 0, pitch = 0, brake = false }
 local keys: { [Enum.KeyCode]: boolean } = {}
 
-local isTouch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
+--- Evaluated on every call rather than cached at require time: on some
+--- devices the input flags settle after the first script frame.
 function InputController.isTouch(): boolean
-	return isTouch
+	return UserInputService.TouchEnabled == true and UserInputService.KeyboardEnabled ~= true
 end
 
 --- Register an action bound to a key/gamepad button (and optionally a touch button).
@@ -69,10 +72,6 @@ function InputController.setTouchAxes(newAxes: any)
 		pitch = math.clamp(tonumber(newAxes.pitch) or 0, -1, 1),
 		brake = newAxes.brake == true,
 	}
-end
-
-function InputController.setGamepadAxes(newAxes: any)
-	gamepadAxes = newAxes
 end
 
 local function mergeAxes()
@@ -125,20 +124,41 @@ local function readGamepad()
 		end
 	end
 
-	-- Radial deadzone so the ship does not drift while the stick rests.
-	local deadzone = 0.16
-	local magnitude = math.sqrt(stickX * stickX + stickY * stickY)
-	local scale = if magnitude < deadzone then 0 else math.min(1, (magnitude - deadzone) / (1 - deadzone)) / magnitude
+	-- Right stick: pitch (Y) and yaw (X).
+	local pitchX, pitchY = 0, 0
+	for _, input in ipairs(gamepad) do
+		if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+			pitchX, pitchY = input.Position.X, input.Position.Y
+		end
+	end
+
+	-- Radial deadzone so the ship does not drift while a stick rests.
+	local function deadzone(x: number, y: number): (number, number)
+		local limit = 0.16
+		local magnitude = math.sqrt(x * x + y * y)
+		if magnitude < limit then
+			return 0, 0
+		end
+		local scale = math.min(1, (magnitude - limit) / (1 - limit)) / magnitude
+		return x * scale, y * scale
+	end
+
+	local moveX, moveY = deadzone(stickX, stickY)
+	local lookX, lookY = deadzone(pitchX, pitchY)
 
 	gamepadAxes = {
-		throttle = -stickY * scale, -- stick forward (negative Y) = thrust
-		strafe = stickX * scale,
+		-- Stick forward (negative Y) is positive thrust.
+		throttle = -moveY,
+		strafe = moveX,
 		lift = triggerR - triggerL,
-		yaw = 0,
-		pitch = 0,
+		yaw = -lookX,
+		pitch = lookY,
 		brake = brakeHeld,
 	}
 end
+
+--- Read the physical pad on demand (also what the polling loop calls).
+InputController.readGamepad = readGamepad
 
 local ACTION_KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.E] = "Interact",

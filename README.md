@@ -111,10 +111,10 @@ do everything; upgrades buy range, speed, cargo and toughness.
 | Stand up from the pilot seat | `E` again, or `X` |
 | Interact prompt | `E` or click |
 | Throttle / reverse | `W` / `S` |
-| Strafe | `A` / `D` |
-| Yaw | `←` / `→` |
+| Strafe left / right | `A` / `D` |
+| Yaw left / right | `←` / `→` |
+| Pitch up / down | `↑` / `↓` |
 | Climb / descend | `Space` / `Left Ctrl` |
-| Pitch | `↑` / `↓` |
 | Brake | `F` |
 | Launch | `L` |
 | Land / descend to surface | `K` |
@@ -130,12 +130,12 @@ do everything; upgrades buy range, speed, cargo and toughness.
 
 | Action | Button |
 | --- | --- |
-| Throttle / yaw | Left thumbstick |
-| Pitch / climb | Right thumbstick |
-| Accelerate / brake | `R2` / `L2` |
-| Brake hard | `X` |
+| Throttle / strafe | Left thumbstick |
+| Yaw / pitch | Right thumbstick |
+| Climb / descend | `R2` / `L2` |
+| Brake | `X` (held) — this is the same button, so on foot it stands you up |
 | Interact (seat, hatch, prompt) | `Y` |
-| Stand up from the pilot seat | `X` |
+| Stand up from the pilot seat | `X`, or `Y` (Interact is context sensitive: seated = stand) |
 | Scan | `R1` |
 | Chart | `L1` |
 | Launch | D-pad up |
@@ -145,10 +145,13 @@ do everything; upgrades buy range, speed, cargo and toughness.
 ### Mobile / touch
 
 * **Left thumb joystick** (appears while you are the pilot): up/down = throttle,
-  left/right = yaw. The readout under it shows the current thrust.
-* **Right-hand cluster** while piloting: `Launch`, `Land`, `Gear`, `Hatch`,
-  `Scan`, `Console` (ship status, crew roles, systems readout), `Stand`
-  (leave the pilot seat).
+  left/right = strafe. The readout under it shows the current thrust.
+* **Steering pad** (bottom right while piloting): slide your right thumb
+  horizontally to yaw, vertically to pitch, and all the way down to brake. It is
+  a fixed pad rather than a floating stick, so it never fights the camera.
+* **Flight layer** on a touch device (joystick + `Launch`, `Land`, `Gear`,
+  `Hatch`, `Scan`, `Console`, `Stand`) appears only while you are the seated
+  pilot, so a phone piloting the ship never fights the walking controls.
 * **Action bar** (bottom right, always visible): Scan, Chart, Workshop,
   Catalogue, Stand, Settings — all sized to the 44 px+ touch target minimum.
 * You can only stand up once the ship is back on the ground; the server
@@ -311,8 +314,8 @@ Current result:
 | `06_world` — builds a real ship, streams real terrain | 14 |
 | `07_gameplay` — full loop through the real router | 37 |
 | `08_contract` — server/client payload shapes | 19 |
-| `09_client` — state mirror, theme scaling, UI kit, every panel builds | 17 |
-| **total** | **166** |
+| `09_client` — state mirror, UI kit, panels, input mapping | 21 |
+| **total** | **170** |
 
 `07_gameplay` is the important one: it fires the real `ClientAction` remote at
 the real `ActionRouter` and reads the state the services push back, so it covers

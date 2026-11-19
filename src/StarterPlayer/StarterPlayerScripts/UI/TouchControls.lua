@@ -32,12 +32,16 @@ local actionCluster: Frame? = nil
 local throttleReadout: TextLabel? = nil
 local visible = false
 
+local steeringPad: Frame? = nil
+local steeringKnob: Frame? = nil
+local steeringActive = false
+
 local joystickActive = false
 local joystickCenter = Vector2.new(0, 0)
 local joystickRadius = 60
 local handoffs: { [string]: () -> () } = {}
 
-local axes = { throttle = 0, yaw = 0, strafe = 0 }
+local axes = { throttle = 0, yaw = 0, strafe = 0, pitch = 0, brake = false }
 
 --- Register what a touch button should do (wired by the main client script).
 function TouchControls.onAction(name: string, callback: () -> ())
@@ -53,8 +57,8 @@ local function publishAxes()
 		yaw = axes.yaw,
 		strafe = axes.strafe,
 		lift = 0,
-		pitch = 0,
-		brake = false,
+		pitch = axes.pitch,
+		brake = axes.brake,
 	})
 	if throttleReadout then
 		local label = "IDLE"
@@ -65,6 +69,12 @@ local function publishAxes()
 		end
 		if math.abs(axes.yaw) > 0.2 then
 			label ..= string.format("  ·  YAW %s", if axes.yaw > 0 then "R" else "L")
+		end
+		if math.abs(axes.pitch) > 0.2 then
+			label ..= string.format("  ·  %s", if axes.pitch > 0 then "PITCH UP" else "PITCH DN")
+		end
+		if axes.brake then
+			label ..= "  ·  BRAKE"
 		end
 		throttleReadout.Text = label
 	end
@@ -83,6 +93,41 @@ local function setKnob(offset: Vector2)
 	-- Up on the stick = forward thrust.
 	axes.throttle = -normalized.Y
 	axes.yaw = normalized.X
+	publishAxes()
+end
+
+local function resetSteering()
+	axes.pitch = 0
+	axes.brake = false
+	publishAxes()
+	if steeringKnob then
+		TweenService:Create(steeringKnob, TweenInfo.new(0.12), {
+			Position = UDim2.fromScale(0.5, 0.5),
+		}):Play()
+	end
+end
+
+--- Map a point inside the steering pad to yaw/pitch/brake.
+local function applySteering(point: Vector2)
+	if not steeringPad then
+		return
+	end
+	local origin = steeringPad.AbsolutePosition
+	local size = steeringPad.AbsoluteSize
+	local radius = math.max(1, math.min(size.X, size.Y) / 2)
+	local offset = Vector2.new(point.X - (origin.X + size.X / 2), point.Y - (origin.Y + size.Y / 2))
+	if offset.Magnitude > radius then
+		offset = offset.Unit * radius
+	end
+	local normalized = offset / radius
+	axes.yaw = normalized.X
+	-- Stick down = nose down. Braking is the same push, squared so it only
+	-- engages when the thumb really commits.
+	axes.pitch = normalized.Y
+	axes.brake = normalized.Y > 0.7
+	if steeringKnob then
+		steeringKnob.Position = UDim2.new(0.5, offset.X, 0.5, offset.Y)
+	end
 	publishAxes()
 end
 
@@ -125,6 +170,51 @@ local function buildJoystick(parent: Instance): Frame
 	joystickRoot = root
 	joystickKnob = knob
 	return root
+end
+
+--- The steering strip.
+---
+--- The on-screen layer only covers the left thumb and a few buttons, so a
+--- phone pilot steers by sliding this strip with the right thumb: horizontal
+--- is yaw, vertical is pitch, and the bar doubles as an analogue brake when
+--- held down. It is not a virtual stick anchored under the thumb (that fights
+--- the camera), it is a fixed slide area that always works the same way.
+local function buildSteeringPad(parent: Instance): Frame
+	local pad = Instance.new("Frame")
+	pad.Name = "SteeringPad"
+	pad.AnchorPoint = Vector2.new(1, 1)
+	pad.Position = UDim2.new(1, -Theme.size(12), 1, -Theme.size(12))
+	pad.Size = UDim2.new(0, Theme.size(140), 0, Theme.size(140))
+	pad.BackgroundColor3 = Theme.colors.panel
+	pad.BackgroundTransparency = 0.55
+	pad.BorderSizePixel = 0
+	pad.Parent = parent
+	UIKit.corner(pad)
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Position = UDim2.fromScale(0.5, 0.5)
+	knob.Size = UDim2.new(0, Theme.size(52), 0, Theme.size(52))
+	knob.BackgroundColor3 = Theme.colors.accentDim
+	knob.BorderSizePixel = 0
+	knob.Parent = pad
+	UIKit.corner(knob)
+
+	local caption = Instance.new("TextLabel")
+	caption.Name = "Caption"
+	caption.BackgroundTransparency = 1
+	caption.Size = UDim2.new(1, 0, 0, Theme.size(14))
+	caption.Position = UDim2.new(0, 0, 1, -Theme.size(16))
+	caption.Font = Theme.fontBold
+	caption.TextSize = Theme.size(Theme.sizes.tiny)
+	caption.TextColor3 = Theme.colors.textDim
+	caption.Text = "STEER"
+	caption.Parent = pad
+
+	steeringPad = pad
+	steeringKnob = knob
+	return pad
 end
 
 local function buildActionCluster(parent: Instance): Frame
@@ -177,16 +267,33 @@ function TouchControls.setVisible(show: boolean)
 	visible = show
 	screen.Enabled = show
 	if not show then
-		axes = { throttle = 0, yaw = 0, strafe = 0 }
+		axes = { throttle = 0, yaw = 0, strafe = 0, pitch = 0, brake = false }
 		publishAxes()
 		if joystickKnob then
 			joystickKnob.Position = UDim2.fromScale(0.5, 0.5)
 		end
+		resetSteering()
 	end
 end
 
 function TouchControls.isVisible(): boolean
 	return visible
+end
+
+--- Push a steering offset into the flight axes without a real touch.
+--- `x`/`y` are -1..1 (right / down). Used by the tests and by any accessibility
+--- path that wants to drive the ship without a drag gesture.
+function TouchControls.steer(x: number, y: number)
+	axes.yaw = math.clamp(x, -1, 1)
+	axes.pitch = math.clamp(y, -1, 1)
+	axes.brake = y > 0.7
+	publishAxes()
+end
+
+--- Throttle only (the joystick's vertical axis).
+function TouchControls.setThrottle(value: number)
+	axes.throttle = math.clamp(value, -1, 1)
+	publishAxes()
 end
 
 --- Build the touch layer and wire gesture handling.
@@ -201,6 +308,7 @@ function TouchControls.build(parent: Instance)
 	screen = gui
 
 	buildJoystick(gui)
+	buildSteeringPad(gui)
 	buildActionCluster(gui)
 
 	-- Drag handling on the joystick root. Using InputChanged keeps it one finger.
@@ -218,23 +326,50 @@ function TouchControls.build(parent: Instance)
 		end)
 	end
 
+	-- Steering pad: any touch that starts inside it drives it until release.
+	if steeringPad then
+		local pad = steeringPad
+		pad.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+				return
+			end
+			steeringActive = true
+			applySteering(Vector2.new(input.Position.X, input.Position.Y))
+		end)
+	end
+
 	UserInputService.InputChanged:Connect(function(input)
-		if not joystickActive or not joystickRoot then
-			return
-		end
 		if input.UserInputType ~= Enum.UserInputType.Touch then
+			if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+				return
+			end
+			if not steeringActive then
+				return
+			end
+		end
+		if steeringActive then
+			applySteering(Vector2.new(input.Position.X, input.Position.Y))
+			if not joystickActive then
+				return
+			end
+		end
+		if not joystickActive or not joystickRoot then
 			return
 		end
 		setKnob(Vector2.new(input.Position.X, input.Position.Y) - joystickCenter)
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
+		if steeringActive then
+			steeringActive = false
+			resetSteering()
+		end
 		if not joystickActive then
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
 			joystickActive = false
-			axes = { throttle = 0, yaw = 0, strafe = 0 }
+			axes = { throttle = 0, yaw = 0, strafe = 0, pitch = 0, brake = false }
 			publishAxes()
 			if joystickKnob and joystickRoot then
 				TweenService:Create(joystickKnob, TweenInfo.new(0.15), {
@@ -244,16 +379,22 @@ function TouchControls.build(parent: Instance)
 		end
 	end)
 
-	-- Reaction to the state: only show while piloting.
+	-- Reaction to the state. The flight layer (joystick + flight buttons) only
+	-- exists while the local player is the seated pilot; the always-on flight
+	-- cluster buttons are part of the HUD.
 	ClientState.on("ship", function(ship)
-		if not InputController.isTouch() then
-			TouchControls.setVisible(false)
-			return
-		end
-		local localUserId = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer.UserId or 0
-		local piloting = ship ~= nil and ship.pilotUserId == localUserId
-		TouchControls.setVisible(piloting == true)
+		TouchControls.refreshFromState(ship)
 	end)
+end
+
+--- Decide whether the flight layer should be on screen right now.
+---
+--- Pure with respect to its argument so it can be tested without a live
+--- LocalPlayer, and so a bootstrap-then-ship push sequence always converges.
+function TouchControls.refreshFromState(ship: any)
+	local player = game:GetService("Players").LocalPlayer
+	local piloting = ship ~= nil and player ~= nil and ship.pilotUserId == player.UserId
+	TouchControls.setVisible(InputController.isTouch() and piloting == true)
 end
 
 return TouchControls
