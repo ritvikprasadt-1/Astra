@@ -1,0 +1,15 @@
+{
+  "name": "deep-field",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Original multiplayer Roblox space-exploration game (procedural galaxy, landable planets, modular ships).",
+  "scripts": {
+    "test": "node tools/harness/run.mjs",
+    "test:contract": "node tools/harness/run.mjs 08",
+    "check": "node tools/check-syntax.mjs",
+    "verify": "node tools/check-syntax.mjs && node tools/harness/run.mjs"
+  },
+  "devDependencies": {
+    "@luau-rs/luau": "^0.739.0"
+  }
+}
