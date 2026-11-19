@@ -1,27 +1,15 @@
 {
-  "name": "roblox-",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "name": "deep-field",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Original multiplayer Roblox space-exploration game (procedural galaxy, landable planets, modular ships).",
   "scripts": {
     "test": "node tools/harness/run.mjs",
-    "test:watch": "node --watch tools/harness/run.mjs"
+    "test:contract": "node tools/harness/run.mjs 08",
+    "check": "node tools/check-syntax.mjs",
+    "verify": "node tools/check-syntax.mjs && node tools/harness/run.mjs"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ritvikprasadt-1/Roblox-.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/ritvikprasadt-1/Roblox-/issues"
-  },
-  "homepage": "https://github.com/ritvikprasadt-1/Roblox-#readme",
-  "dependencies": {
+  "devDependencies": {
     "@luau-rs/luau": "^0.739.0"
   }
 }
