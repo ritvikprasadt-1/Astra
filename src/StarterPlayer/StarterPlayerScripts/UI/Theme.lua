@@ -64,7 +64,9 @@ function Theme.size(points: number): number
 end
 
 function Theme.tapTarget(): number
-	return math.max(40, math.floor(Theme.sizes.tapTarget * scale + 0.5))
+	-- The floor is the accessible minimum (44 pt), never lower: a small phone
+	-- or a shrunk UI scale must not make buttons hard to hit.
+	return math.max(44, math.floor(Theme.sizes.tapTarget * scale + 0.5))
 end
 
 --- Colour with alpha, for panels/tints.

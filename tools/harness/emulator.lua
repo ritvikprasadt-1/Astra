@@ -277,6 +277,15 @@ end
 -- ---------------------------------------------------------------------------
 local SIGNAL_ERRORS = {}
 
+--- Run `fn` now, and again after `seconds` of simulated time.
+--- Roblox task.delay/task.spawn do not exist inside this VM's own code, so the
+--- emulator keeps a tiny queue that the scheduler drains.
+local DELAYED = {}
+
+local function runLater(seconds, fn)
+	table.insert(DELAYED, { at = (SIGNAL_ERRORS.clock or 0) + (seconds or 0), fn = fn })
+end
+
 local function newSignal()
 	local handlers = {}
 	local signal = {}
@@ -654,6 +663,28 @@ local function newInstance(className)
 			rawget(self, "OnServerEvent"):Fire(player, payload)
 		end
 	end
+	-- GuiObject events. Every panel/button in the game connects to these, so
+	-- they must exist for UI code to be executed at all in the harness.
+	if className == "TextButton" or className == "ImageButton" or className == "TextButton2" then
+		rawset(object, "Activated", newSignal())
+		rawset(object, "MouseButton1Click", newSignal())
+		rawset(object, "MouseButton1Down", newSignal())
+		rawset(object, "MouseButton1Up", newSignal())
+		rawset(object, "MouseEnter", newSignal())
+		rawset(object, "MouseLeave", newSignal())
+	elseif className == "TextBox" then
+		rawset(object, "FocusLost", newSignal())
+		rawset(object, "Focused", newSignal())
+	end
+	if className == "Frame" or className == "ScrollingFrame" or className == "TextLabel"
+		or className == "TextButton" or className == "ImageLabel" then
+		rawset(object, "InputBegan", newSignal())
+		rawset(object, "InputEnded", newSignal())
+		rawset(object, "InputChanged", newSignal())
+		rawget(object, "_props").AutomaticSize = "None"
+		rawget(object, "_props").Visible = true
+		rawget(object, "_props").AnchorPoint = nil
+	end
 	if className == "ProximityPrompt" then
 		rawset(object, "Triggered", newSignal())
 		rawget(object, "_props").Enabled = true
@@ -711,10 +742,31 @@ Emulator.CFrame = CFrame.static
 Emulator.CFrameClass = CFrame
 Emulator.Color3 = Color3.static
 Emulator.Enum = Enum
+Emulator.TweenInfo = { new = function(duration, style, direction)
+	return { Time = duration or 0, Style = style, Direction = direction }
+end }
 Emulator.Instance = Instance
 Emulator.UDim = UDim
 Emulator.UDim2 = UDim2
 Emulator.signalErrors = SIGNAL_ERRORS
+
+--- Advance emulator-internal timers (tweens, delayed resets) by `seconds`.
+function Emulator.advance(seconds)
+	local clock = (SIGNAL_ERRORS.clock or 0) + (seconds or 0)
+	SIGNAL_ERRORS.clock = clock
+	local ready, remaining = {}, {}
+	for _, entry in ipairs(DELAYED) do
+		if entry.at <= clock then
+			table.insert(ready, entry.fn)
+		else
+			table.insert(remaining, entry)
+		end
+	end
+	DELAYED = remaining
+	for _, fn in ipairs(ready) do
+		pcall(fn)
+	end
+end
 Emulator.newCFrame = newCFrame
 Emulator.newVector3 = newVector3
 Emulator.newInstance = newInstance

@@ -58,8 +58,10 @@ ScannerPanel.build(playerGui)
 TouchControls.build(playerGui)
 Modal.initInput()
 
--- 3b. Tools: the mining prompt listener works on every device.
+-- 3b. Tools and per-frame controllers.
 MiningController.init()
+InputController.init()
+FlightController.init()
 
 -- 4. Actions ----------------------------------------------------------------
 
@@ -280,6 +282,7 @@ InputController.onAction("Scan", doScan)
 InputController.onAction("Liftoff", launch)
 InputController.onAction("Descend", descend)
 InputController.onAction("Gear", toggleGear)
+-- Escape / ButtonB are handled once, by Modal.initInput above.
 
 -- 5. Server-driven UI updates ------------------------------------------------
 

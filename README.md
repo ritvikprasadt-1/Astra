@@ -302,7 +302,8 @@ Current result:
 | `06_world` — builds a real ship, streams real terrain | 14 |
 | `07_gameplay` — full loop through the real router | 36 |
 | `08_contract` — server/client payload shapes | 19 |
-| **total** | **148** |
+| `09_client` — state mirror, theme scaling, UI kit | 10 |
+| **total** | **158** |
 
 `07_gameplay` is the important one: it fires the real `ClientAction` remote at
 the real `ActionRouter` and reads the state the services push back, so it covers

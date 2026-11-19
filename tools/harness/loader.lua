@@ -184,6 +184,11 @@ service("TeleportService")
 service("ReplicatedFirst")
 service("CollectionService")
 service("PhysicsService")
+service("TweenService")
+service("UserInputService")
+service("GuiService")
+service("ProximityPromptService")
+service("TweenService")
 
 -- Workspace.Terrain: the emulator's recording Terrain object.
 graftChild(Workspace, EMU.Terrain)
@@ -308,6 +313,19 @@ RunServiceService.IsServer = function()
 end
 RunServiceService.IsClient = function()
 	return false
+end
+
+-- TweenService: tweens complete immediately (visual only, never gameplay).
+local TweenServiceService = services["TweenService"]
+TweenServiceService.Create = function()
+	local completed = makeSignal()
+	return {
+		Play = function()
+			completed:Fire()
+		end,
+		Cancel = function() end,
+		Completed = completed,
+	}
 end
 
 -- ---------------------------------------------------------------------------
@@ -556,6 +574,7 @@ HarnessGlobals.Color3 = __EMU_GLOBAL.Color3
 HarnessGlobals.Vector2 = { new = function(x, y)
 	return { X = x or 0, Y = y or 0 }
 end }
+HarnessGlobals.TweenInfo = __EMU_GLOBAL.TweenInfo
 HarnessGlobals.UDim = __EMU_GLOBAL.UDim
 HarnessGlobals.UDim2 = __EMU_GLOBAL.UDim2
 HarnessGlobals.PhysicalProperties = { new = function(density, friction, elasticity)
@@ -566,6 +585,12 @@ HarnessGlobals.NumberSequence = { new = function(value)
 end }
 HarnessGlobals.ColorSequence = { new = function(color)
 	return { color = color }
+end }
+HarnessGlobals.NumberRange = { new = function(a, b)
+	return { Min = a, Max = b }
+end }
+HarnessGlobals.Rect = { new = function(a, b, c, d)
+	return { Min = { X = a, Y = b }, Max = { X = c, Y = d } }
 end }
 HarnessGlobals.tick = function()
 	return scheduler.clock
