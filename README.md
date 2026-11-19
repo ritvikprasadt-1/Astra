@@ -1,4 +1,4 @@
-# Deep Field
+# Astra 
 
 An original multiplayer space-exploration sandbox for Roblox. You get a ship, a
 galaxy with 100,000,000 addressable planets, and a scanner. Pick a destination,
