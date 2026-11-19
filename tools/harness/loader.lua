@@ -137,6 +137,29 @@ end
 Vector3.__tostring = function(v)
 	return string.format("%.3f, %.3f, %.3f", v.X, v.Y, v.Z)
 end
+Vector3.__index = function(self, key)
+	if key == "Magnitude" then
+		return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
+	elseif key == "Unit" then
+		local m = math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
+		if m == 0 then
+			return newVector3(0, 0, 0)
+		end
+		return newVector3(self.X / m, self.Y / m, self.Z / m)
+	elseif key == "size" then
+		return nil
+	end
+	return nil
+end
+Vector3.__div = function(a, b)
+	if type(b) == "number" then
+		return newVector3(a.X / b, a.Y / b, a.Z / b)
+	end
+	return newVector3(a.X / b.X, a.Y / b.Y, a.Z / b.Z)
+end
+Vector3.__unm = function(a)
+	return newVector3(-a.X, -a.Y, -a.Z)
+end
 
 local Color3 = {}
 Color3.__index = Color3
