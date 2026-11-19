@@ -60,6 +60,11 @@ export type Ship = {
 
 local ships: { [string]: Ship } = {}
 local playerShip: { [number]: string } = {}
+
+--- How long a surface landing takes, in seconds of server time.
+local LANDING_SECONDS = 2.4
+--- Ship id -> seconds left in its descent (nil when not landing).
+local landingCountdown: { [string]: number } = {}
 local SHIP_ID = "Ship-1"
 
 local hatchConnections: { [string]: { RBXScriptConnection } } = {}
@@ -253,6 +258,15 @@ function ShipService.releaseSeat(player: Player, shipId: string)
 		ship.pilotUserId = nil
 		if ship.state == "Powered" then
 			ShipService.transition(ship, "Landed")
+		elseif ship.state == "Flight" then
+			-- A ship left flying with nobody at the controls would drift until
+			-- it hit the zone wall; bring it down where it is instead.
+			landingCountdown[ship.id] = LANDING_SECONDS
+			ShipService.transition(ship, "Landing")
+		elseif ship.state == "Orbit" then
+			-- Stay in orbit and let the next pilot take over; an orbit is a
+			-- stable place to leave a ship.
+			ship.powered = false
 		end
 		ShipService.broadcast()
 	end
@@ -302,7 +316,14 @@ function ShipService.requestHatch(player: Player, shipId: string): (boolean, str
 	else
 		applyHatch(ship, false)
 		if ship.state == "Boarding" then
-			ShipService.transition(ship, "Powered")
+			-- `Powered` means "sealed and under a pilot". Shutting the hatch
+			-- with an empty seat leaves the ship simply Landed, so the state
+			-- never claims a pilot that is not there.
+			if ship.pilotUserId then
+				ShipService.transition(ship, "Powered")
+			else
+				ShipService.transition(ship, "Landed")
+			end
 		end
 		-- A crew member standing in the doorway when it closes is pushed clear.
 		ShipService.nudgeOutOfDoorway(ship)
@@ -371,11 +392,41 @@ function ShipService.requestLanding(player: Player, shipId: string): (boolean, s
 	if not ship.landingGearDown then
 		return false, "Lower the landing gear first."
 	end
+	-- Land where we are. The surface is streamed for the expedition's active
+	-- planet; if the player has not descended yet, re-stream it now.
+	local okStream, UniverseService = pcall(require, script.Parent.UniverseService)
+	if okStream and not UniverseService.isSurfaceLoaded() then
+		UniverseService.ensureSurface()
+	end
 	local ok, reason = ShipService.transition(ship, "Landing")
 	if not ok then
 		return false, reason
 	end
+	-- Landing is a timed descent: the flight step counts it down and then puts
+	-- the ship back on the pad in the currently loaded surface. Without this,
+	-- Landing would be a dead end with no way back to the ground.
+	landingCountdown[ship.id] = LANDING_SECONDS
+	ShipService.broadcast()
 	return true, nil
+end
+
+--- Called by the flight step. Returns true once the ship has touched down.
+function ShipService.tickLanding(ship: Ship, dt: number): boolean
+	if ship.state ~= "Landing" then
+		landingCountdown[ship.id] = nil
+		return false
+	end
+	local remaining = landingCountdown[ship.id]
+	if remaining == nil then
+		return false
+	end
+	remaining -= dt
+	if remaining > 0 then
+		landingCountdown[ship.id] = remaining
+		return false
+	end
+	landingCountdown[ship.id] = nil
+	return true
 end
 
 function ShipService.setLandingGear(player: Player, shipId: string, down: boolean): (boolean, string?)
@@ -555,7 +606,14 @@ function ShipService.applyBlueprint(player: Player, designData: any): (boolean, 
 end
 
 --- Boot: create the starter ship for the first joining player, at the origin.
+local shipWired = false
+
 function ShipService.init()
+	-- Idempotent: one crew hook per server.
+	if shipWired then
+		return
+	end
+	shipWired = true
 	Players.PlayerAdded:Connect(function(player)
 		-- Deferred so PlayerDataService has finished loading the document.
 		task.delay(1.5, function()

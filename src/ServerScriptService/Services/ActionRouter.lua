@@ -346,7 +346,15 @@ end
 -- Router --------------------------------------------------------------------
 
 --- Wire the single client remote. Called once by the bootstrap script.
+local routerWired = false
+
 function ActionRouter.init()
+	-- Idempotent: a second init would attach a second handler, and every
+	-- request would then be executed (and answered) twice.
+	if routerWired then
+		return
+	end
+	routerWired = true
 	local remote = RemoteService.get(RemoteService.names.ClientAction)
 	remote.OnServerEvent:Connect(function(player, payload)
 		local op = type(payload) == "table" and payload.op or nil

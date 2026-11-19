@@ -136,6 +136,20 @@ function FlightService.putInOrbit(ship: any, zone: Vector3)
 	end
 end
 
+--- Put the ship back on the landing pad of whichever surface is loaded.
+---
+--- Safe from any altitude: the pad deck is flat, and the state machine only
+--- calls this after a completed descent countdown.
+function FlightService.placeOnPad(ship: any)
+	-- Lazy require: PlanetService already requires FlightService.
+	local PlanetService = require(script.Parent.PlanetService)
+	local active = PlanetService.getActive()
+	local height = active and active.params and active.params.padHeight or 0
+	local position = Vector3.new(-26, height + 2, 0)
+	FlightService.dockAt(ship, position, Vector3.new(0, 0, 0))
+	ship.landingGearDown = true
+end
+
 --- Set a docked ship down at a landing position.
 function FlightService.dockAt(ship: any, position: Vector3, lookAt: Vector3)
 	local root = ship.built.root
@@ -177,6 +191,17 @@ local function step(dt: number)
 			ship.state = "Flight"
 			ShipService.broadcast()
 		end
+	elseif ship.state == "Landing" then
+		if ShipService.tickLanding(ship, dt) then
+			-- Touch down on the loaded surface, below the ship wherever it got
+			-- to: the pad is flat and deterministic, so this is always safe.
+			FlightService.placeOnPad(ship)
+			ShipService.transition(ship, "Landed")
+			local remote = RemoteService.get(RemoteService.names.StateUpdate)
+			remote:FireAllClients({ kind = "Travel", phase = "landed" })
+			ShipService.broadcast()
+		end
+		return
 	elseif ship.state == "Flight" or ship.state == "Orbit" then
 		-- continue below
 	else
@@ -245,7 +270,14 @@ FlightService.notify = function(player: Player, text: string)
 end
 
 --- Broadcast transforms at a UI-friendly rate (10 Hz) rather than every frame.
+local flying = false
+
 function FlightService.init()
+	-- Idempotent: one physics loop, no matter how often boot runs.
+	if flying then
+		return
+	end
+	flying = true
 	flight.lastUpdate = os.clock()
 	local accumulator = 0
 	local broadcastAccumulator = 0

@@ -224,7 +224,14 @@ function PlayerDataService.release(player: Player)
 end
 
 --- Start autosave + player lifecycle hooks. Called once by Bootstrap.
+local dataWired = false
+
 function PlayerDataService.init()
+	-- Idempotent: a second set of connections would load every player twice.
+	if dataWired then
+		return
+	end
+	dataWired = true
 	-- Load anyone already connected (Studio "Play Solo" order safety).
 	for _, player in ipairs(Players:GetPlayers()) do
 		task.spawn(PlayerDataService.load, player)

@@ -133,6 +133,28 @@ return function(requireModule, phase)
 			expect(ship.crew[phase.player.UserId]).toBe("Captain")
 		end)
 
+		it("handles each request exactly once even if init runs twice", function()
+			-- Init is called from boot and again here; a duplicate handler would
+			-- execute every request twice (and answer it twice), which silently
+			-- corrupts toggles like the hatch.
+			settle(40)
+			ActionRouter.init()
+			ActionRouter.init()
+			local replies = 0
+			for _ = 1, 2 do
+				local before = #state.toClient
+				action:FireServer(phase.player, { op = "Status", rid = 777 })
+				for index = before + 1, #state.toClient do
+					local message = state.toClient[index]
+					if message.player == phase.player and message.payload.op == "Status" then
+						replies += 1
+					end
+				end
+				settle(40)
+			end
+			expect(replies).toBe(2)
+		end)
+
 		it("routes unknown ops nowhere and never errors", function()
 			local result = call(phase.player, "NotARealOp", {})
 			expect(result).toBeNil()
@@ -281,6 +303,55 @@ return function(requireModule, phase)
 			local attempt = call(phase.player, "Hatch", { shipId = ship.id })
 			expect(attempt.ok).toBe(false)
 			expect(ship.hatchOpen).toBe(false)
+		end)
+
+		it("lands a flying ship back on the pad, on the server's clock", function()
+			local ship = phase.ship
+			expect(ship.state).toBe("Flight")
+			-- Gear is down (it stays down through flight) and the machine
+			-- refuses to move it at speed, so landing is always available.
+			settle(20)
+			expect(ship.landingGearDown).toBe(true)
+			expect(call(phase.player, "Gear", { shipId = ship.id, down = false }).ok).toBe(false)
+			settle(20)
+
+			local landing = call(phase.player, "Landing", { shipId = ship.id })
+			expect(landing.ok).toBe(true)
+			expect(ship.state).toBe("Landing")
+			expect(ship.built.root.Anchored).toBe(false)
+
+			-- Descent is timed: the ship stays airborne until the countdown ends.
+			flightTick(0.1)
+			expect(ship.state).toBe("Landing")
+
+			for _ = 1, 80 do
+				flightTick(0.1)
+				if ship.state == "Landed" then
+					break
+				end
+			end
+			expect(ship.state).toBe("Landed")
+			expect(ship.built.root.Anchored).toBe(true)
+			expect(ship.landingGearDown).toBe(true)
+
+			-- Back on the ground, the hatch may move again. Assert the toggle
+			-- rather than an absolute value: earlier tests may have left it in
+			-- either position. (Spaced out for the generic limiter.)
+			expect(ShipStates.canOpenHatch(ship.state)).toBe(true)
+			settle(20)
+			phase.player.Root.Position = ship.built.hatch.Position
+			local wasOpen = ship.hatchOpen
+			expect(call(phase.player, "Hatch", { shipId = ship.id }).ok).toBe(true)
+			expect(ship.hatchOpen).toBe(not wasOpen)
+			settle(20)
+			call(phase.player, "Hatch", { shipId = ship.id })
+		end)
+
+		it("refuses a landing request when the ship is already down", function()
+			local ship = phase.ship
+			expect(ship.state).toBe("Landed")
+			local attempt = call(phase.player, "Landing", { shipId = ship.id })
+			expect(attempt.ok).toBe(false)
 		end)
 	end)
 

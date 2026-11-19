@@ -79,6 +79,14 @@ function UniverseService.isSurfaceLoaded(): boolean
 	return PlanetService.getActive() ~= nil
 end
 
+--- Make sure the expedition's planet surface exists on the server.
+--- Idempotent: it is safe to call from a landing request, a descent, or boot.
+function UniverseService.ensureSurface()
+	if not PlanetService.getActive() then
+		PlanetService.load(expedition.systemId, expedition.slot)
+	end
+end
+
 -- Chart ---------------------------------------------------------------------
 
 --- A bounded page of the chart: the current system plus its nearest neighbours.

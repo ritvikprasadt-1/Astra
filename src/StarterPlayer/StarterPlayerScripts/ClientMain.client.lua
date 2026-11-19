@@ -202,7 +202,25 @@ local function launch()
 	end)
 end
 
+--- Land. `Descend` covers the orbit-to-surface leg (it streams the planet and
+--- sets the ship down); `Landing` covers flying down onto the planet we are
+--- already standing over. The server rejects the wrong one per state.
 local function descend()
+	local ship = currentShip()
+	if not ship then
+		notify("No ship.", "warning")
+		return
+	end
+	if ship.state == "Flight" then
+		NetController.send("Landing", { shipId = ship.id }, function(ok, message)
+			if not ok then
+				notify(message or "Cannot land here.", "danger")
+			else
+				notify("Descending to the surface.", "success")
+			end
+		end)
+		return
+	end
 	NetController.send("Descend", nil, function(ok, message)
 		if not ok then
 			notify(message or "Cannot descend.", "danger")

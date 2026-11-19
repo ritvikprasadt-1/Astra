@@ -312,10 +312,10 @@ Current result:
 | `04_shipmodel` — module catalogue, blueprint validation | 23 |
 | `05_state` — ship state machine, permissions | 14 |
 | `06_world` — builds a real ship, streams real terrain | 14 |
-| `07_gameplay` — full loop through the real router | 37 |
+| `07_gameplay` — full loop through the real router | 40 |
 | `08_contract` — server/client payload shapes | 19 |
 | `09_client` — state mirror, UI kit, panels, input mapping | 21 |
-| **total** | **170** |
+| **total** | **173** |
 
 `07_gameplay` is the important one: it fires the real `ClientAction` remote at
 the real `ActionRouter` and reads the state the services push back, so it covers
@@ -336,12 +336,18 @@ hatch/seat/launch/permission/cooldown/warp/crafting behaviour end to end.
   crew permissions, mining distance/cooldown, scan profile, chart page, address
   lookup, warp range refusal, recipe list, blueprint save/load, rate limiting,
   request-id echo.
+* The full ground cycle: seat -> launch -> flight -> timed landing -> back on the
+  pad -> hatch opens again, plus releasing a seat (and the owner override).
+* Service init is idempotent: booting twice must not double-handle requests.
 * Persistence degrades safely when DataStore is unavailable.
 
 **Written and reviewed, but NOT executed (no Roblox Studio here)**
 
-* Anything visual: HUD layout, panels, touch joystick, 3D workshop preview rig.
-  The modules load and their pure helpers run offline; their rendering does not.
+* Anything pixel-visual: what the HUD/panels/touch layer *look* like, and the
+  3D workshop preview rig. Their trees are built and exercised in the harness
+  (every panel opens/closes, every action-bar button fires, the modal close hook
+  runs exactly once, touch and gamepad input map to real flight axes), but
+  nobody has seen the result on a screen.
 * Physics: whether the welded ship physically carries standing players, whether
   seat/hatch collisions feel right, and flight handling feel. The harness asserts
   structure (welds exist, parts are unanchored, floor friction is high) — that is
@@ -357,7 +363,9 @@ hatch/seat/launch/permission/cooldown/warp/crafting behaviour end to end.
 
 * One shared expedition per server (no per-crew ships yet).
 * Space ↔ surface is a transition, not seamless flight; there is no spherical
-  gravity or orbital mechanics.
+  gravity or orbital mechanics. `Descend` is a scripted 2 s transition, and
+  `Land` from open flight is a 2.4 s timed descent that sets the ship back on
+  the pad of the planet you are over.
 * One biome surface per planet, flattened landing pad, no caves or water physics
   beyond a water plane.
 * Combat, NPCs, economy and base building are out of scope.

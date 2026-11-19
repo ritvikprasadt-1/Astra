@@ -423,7 +423,14 @@ function PlanetService.consumeDeposit(key: string)
 end
 
 --- Boot: start the streaming loop.
+local streaming = false
+
 function PlanetService.init()
+	-- Idempotent: exactly one streaming loop.
+	if streaming then
+		return
+	end
+	streaming = true
 	task.spawn(function()
 		while true do
 			local dt = RunService.Heartbeat:Wait()
