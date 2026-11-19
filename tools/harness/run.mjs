@@ -104,7 +104,8 @@ for (const file of tests) {
   try {
     result = lua.execute(`
       local phase = __PHASE
-      __describeChunk(phase)
+      local api = __describeChunk(phase)
+      describe, it, expect = api.describe, api.it, api.expect
       local suite = __testChunk()
       local ok, err = pcall(suite, function(path) return Harness.loadModule(path) end, phase)
       if not ok then

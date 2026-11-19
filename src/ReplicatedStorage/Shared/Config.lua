@@ -180,15 +180,17 @@ Config.STARTER_TECH = { "hull_plate", "engine_basic", "landing_gear", "cargo_hol
 Config.DEFAULT_BLUEPRINT = {
 	name = "Wayfarer",
 	colors = { primary = 1, secondary = 2, accent = 5 },
+	-- The 3x3 cabin occupies cells (0,0)-(2,2). Every other module must share an
+	-- edge with a placed module, so this layout is one connected hull.
 	modules = {
-		{ id = "cockpit_core", x = 0, y = 0, z = 0, rot = 0 },
-		{ id = "hull_plate", x = 2, y = 0, z = 0, rot = 0 },
-		{ id = "hull_plate", x = -1, y = 0, z = 0, rot = 0 },
-		{ id = "engine_basic", x = 3, y = 0, z = 0, rot = 0 },
-		{ id = "engine_basic", x = 3, y = 0, z = 1, rot = 0 },
-		{ id = "landing_gear", x = 0, y = 0, z = 2, rot = 0 },
-		{ id = "landing_gear", x = 2, y = 0, z = 2, rot = 0 },
-		{ id = "cargo_hold", x = -2, y = 0, z = 0, rot = 0 },
+		{ id = "cockpit_cabin", x = 0, y = 0, z = 0, rot = 0 }, -- cells x 0..2, z 0..2
+		{ id = "hull_plate", x = 3, y = 0, z = 0, rot = 0 }, -- +X of cabin
+		{ id = "hull_plate", x = -1, y = 0, z = 0, rot = 0 }, -- -X of cabin
+		{ id = "engine_basic", x = 4, y = 0, z = 0, rot = 0 }, -- aft of hull
+		{ id = "engine_basic", x = 4, y = 0, z = 1, rot = 0 },
+		{ id = "landing_gear", x = 0, y = 0, z = 3, rot = 0 }, -- +Z of cabin
+		{ id = "landing_gear", x = 2, y = 0, z = 3, rot = 0 },
+		{ id = "cargo_hold", x = -2, y = 0, z = 0, rot = 0 }, -- -X of hull
 	},
 }
 

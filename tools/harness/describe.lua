@@ -9,26 +9,36 @@ local function fail(message, level)
 	error(message, (level or 1) + 1)
 end
 
-function describe(suiteName, fn)
+local api = {}
+local currentTest = "?" 
+
+function api.describe(suiteName, fn)
 	local previous = phase.suite
 	phase.suite = suiteName
 	local ok, err = pcall(fn)
 	if not ok then
 		phase.fail = phase.fail + 1
-		table.insert(phase.failures, string.format("[%s] suite error: %s", suiteName, tostring(err)))
+		table.insert(phase.failures, string.format("[%s] suite error in '%s': %s", tostring(suiteName), currentTest, tostring(err)))
 	end
 	phase.suite = previous
 end
 
-function it(testName, fn)
-	local label = string.format("%s > %s", phase.suite, testName)
+function api.it(testName, fn)
+	local label = string.format("%s > %s", tostring(phase.suite), tostring(testName))
+	if type(fn) ~= "function" then
+		phase.fail = phase.fail + 1
+		table.insert(phase.failures, label .. "\n    it() needs a function, got " .. type(fn))
+		return
+	end
+	phase.current = label
+	currentTest = label
 	local ok, err = pcall(fn)
 	if ok then
 		phase.pass = phase.pass + 1
 	else
 		phase.fail = phase.fail + 1
 		table.insert(phase.failures, string.format("%s\n    %s", label, tostring(err)))
-		io_write("  FAIL " .. label .. "\n         " .. tostring(err) .. "\n")
+		print("  FAIL " .. label .. "\n         " .. tostring(err) .. "\n")
 	end
 end
 
@@ -46,8 +56,9 @@ local function fmt(value)
 	return tostring(value)
 end
 
-function expect(actual)
+function api.expect(actual)
 	local api = {}
+local currentTest = "?" 
 	function api.toBe(expected)
 		if actual ~= expected then
 			fail(string.format("expected %s, got %s", fmt(expected), fmt(actual)), 2)
@@ -134,3 +145,5 @@ function expect(actual)
 	end
 	return api
 end
+
+return api

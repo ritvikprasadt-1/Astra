@@ -91,9 +91,9 @@ local function sanitizeModule(raw: any): Module?
 	if type(rot) ~= "number" then
 		rot = 0
 	end
-	-- Integer snapping + bounds; anything outside the allowed build volume is a
-	-- hard reject rather than a silent fix.
-	x, y, z = math.floor(x), math.floor(y), math.floor(z)
+	-- Snap fractional coordinates to the cell grid (a client may send floats),
+	-- then enforce the build volume. Out-of-volume values are a hard reject.
+	x, y, z = math.floor(x + 0.5), math.floor(y + 0.5), math.floor(z + 0.5)
 	rot = ((math.floor(rot) % 4) + 4) % 4
 	if x < -12 or x > 12 or y < 0 or y > 3 or z < -12 or z > 12 then
 		return nil

@@ -390,7 +390,8 @@ function GalaxyGen.getPlanet(systemId: number, slot: number): PlanetInfo
 
 	-- 1-3 neutral natural landmarks, unique per planet.
 	local landmarkTypes = {}
-	local landmarkCount = 1 + stream:nextInt(3)
+	-- 1..3 landmarks (nextInt(n) returns 1..n inclusive).
+	local landmarkCount = stream:nextInt(3)
 	local available = table.clone(LANDMARKS)
 	for _ = 1, math.min(landmarkCount, #available) do
 		local pick = stream:nextInt(#available)
