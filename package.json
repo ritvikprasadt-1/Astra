@@ -1,0 +1,27 @@
+{
+  "name": "roblox-",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "node tools/harness/run.mjs",
+    "test:watch": "node --watch tools/harness/run.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ritvikprasadt-1/Roblox-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ritvikprasadt-1/Roblox-/issues"
+  },
+  "homepage": "https://github.com/ritvikprasadt-1/Roblox-#readme",
+  "dependencies": {
+    "@luau-rs/luau": "^0.739.0"
+  }
+}
