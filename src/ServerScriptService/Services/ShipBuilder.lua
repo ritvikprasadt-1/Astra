@@ -15,8 +15,11 @@
 ]]
 
 local Templates = require(script.Parent.Templates)
-local Config = require(script.Parent.Parent.Shared.Config)
-local ShipModules = require(script.Parent.Parent.Shared.ShipModules)
+-- Same rule as every other module: shared code is reached through the service,
+-- not through script.Parent, so the path is identical offline and in Studio.
+local Shared = game:GetService("ReplicatedStorage").Shared
+local Config = require(Shared.Config)
+local ShipModules = require(Shared.ShipModules)
 
 local ShipBuilder = {}
 

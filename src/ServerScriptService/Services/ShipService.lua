@@ -31,6 +31,7 @@ local GameConfig = require(Shared.GameConfig)
 local Blueprint = require(Shared.Blueprint)
 local ShipStates = require(Shared.ShipStates)
 local ShipModules = require(Shared.ShipModules)
+local ShipPermissions = require(Shared.ShipPermissions)
 
 local ShipBuilder = require(script.Parent.ShipBuilder)
 local RemoteService = require(script.Parent.RemoteService)
@@ -123,14 +124,7 @@ function ShipService.roleOf(ship: Ship, player: Player): string?
 end
 
 function ShipService.canPilot(ship: Ship, player: Player): boolean
-	local role = ship.crew[player.UserId]
-	if not role then
-		return false
-	end
-	if ship.ownerUserId == player.UserId then
-		return true
-	end
-	return role == "Pilot"
+	return ShipPermissions.canPilot(ship.ownerUserId, ship.crew[player.UserId], player.UserId)
 end
 
 --- Distance from a player's character to a world point (validated interactions).
@@ -417,13 +411,13 @@ function ShipService.setRole(actor: Player, target: Player, role: string): (bool
 	if not ship then
 		return false, "No ship."
 	end
-	if ship.ownerUserId ~= actor.UserId then
+	if not ShipPermissions.canManageRoles(ship.ownerUserId, actor.UserId) then
 		return false, "Only the ship's owner can assign roles."
 	end
 	if not ship.crew[target.UserId] then
 		return false, "That player is not crew."
 	end
-	if role ~= "Pilot" and role ~= "Crew" and role ~= "Captain" then
+	if not ShipPermissions.isRole(role) then
 		return false, "Unknown role."
 	end
 	ship.crew[target.UserId] = role
@@ -500,7 +494,7 @@ function ShipService.spawnForPlayer(player: Player, position: Vector3, lookAt: V
 
 	-- Everyone online shares the expedition ship.
 	for _, other in ipairs(Players:GetPlayers()) do
-		ShipService.addCrew(ship, other, if other.UserId == player.UserId then "Captain" else "Crew")
+		ShipService.addCrew(ship, other, ShipPermissions.defaultRole(player.UserId, other.UserId))
 	end
 
 	-- Seat prompt hookup.

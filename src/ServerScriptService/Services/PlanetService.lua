@@ -65,6 +65,10 @@ local pendingFills: { { cx: number, cz: number, key: string } } = {}
 local terrain: Terrain = Workspace.Terrain :: Terrain
 local lastStreamCentre: Vector3? = nil
 
+-- Forward declaration: updateStreaming() (defined below) needs this, and a
+-- plain `local function` there would be a nil global at that call site.
+local materialiseDeposits: () -> ()
+
 local function worldFolder(): Folder
 	local existing = Workspace:FindFirstChild(WorldFolderName)
 	if existing and existing:IsA("Folder") then
@@ -259,7 +263,7 @@ function PlanetService.updateStreaming(position: Vector3, immediate: boolean?): 
 end
 
 --- Place the deterministic deposits that fall inside currently loaded chunks.
-local function materialiseDeposits()
+function materialiseDeposits()
 	if not active then
 		return
 	end

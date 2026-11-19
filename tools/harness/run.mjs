@@ -64,6 +64,17 @@ lua.execute(`
   end
 `);
 
+// A real, in-VM Roblox datatype/instance emulator (Vector3, CFrame, Parts,
+// Terrain, attributes). It must live inside the VM: instances are tables the
+// Luau modules create and mutate directly.
+const emulatorSource = readFileSync(join(here, 'emulator.lua'), 'utf8');
+lua.execute('__EMU = nil');
+lua.globals.set(
+  '__emulatorChunk',
+  lua.executeBytecode(lua.compile(`return function(...)\n${emulatorSource}\nend`, 'emulator.lua'))[0],
+);
+lua.execute('__EMU = __emulatorChunk()');
+
 // The loader returns the Roblox stub bag; publish it as Luau globals.
 const loaders = lua.execute(readFileSync(join(here, 'loader.lua'), 'utf8'));
 for (const [key, value] of Object.entries(loaders[0].toObject())) {
@@ -107,7 +118,20 @@ for (const file of tests) {
       local api = __describeChunk(phase)
       describe, it, expect = api.describe, api.it, api.expect
       local suite = __testChunk()
-      local ok, err = pcall(suite, function(path) return Harness.loadModule(path) end, phase)
+      local ok, err = pcall(suite, function(path)
+        -- Roblox requires short names ("Shared.Config"); accept those too.
+        if string.find(path, "%.", 1, false) and string.find(path, "/", 1, true) == nil then
+          local folder, name = string.match(path, "^(.-)%.(.+)$")
+          path = folder .. "/" .. name
+        end
+        if string.sub(path, 1, 19) == "ReplicatedStorage/" then
+          return Harness.loadModule(path)
+        end
+        if string.sub(path, 1, 6) == "Shared" then
+          return Harness.loadModule(path)
+        end
+        return Harness.loadModule(path)
+      end, phase)
       if not ok then
         phase.fail = phase.fail + 1
         table.insert(phase.failures, "suite crashed: " .. tostring(err))

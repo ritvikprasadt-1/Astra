@@ -9,6 +9,7 @@
 -- test suite means the real game scripts compile and behave.
 
 local MODULES = __MODULES -- path -> compiled function handle
+local __EMU_GLOBAL = __EMU -- datatype emulation table, published by run.mjs
 local CACHE = {}
 
 local function split(path)
@@ -90,6 +91,18 @@ end
 
 local Folder = { __index = folderIndex }
 
+local EMU = __EMU_GLOBAL
+
+--- Register an emulated Instance (from emulator.lua) as a child of a loader node,
+--- so path-based require() and folder walks see both kinds of object.
+local function graftChild(parent, child)
+	child.Parent = parent
+	if parent._children then
+		parent._children[child.Name] = child
+	end
+	return child
+end
+
 local function newFolder(className, name)
 	return setmetatable(baseInstance(className, name), Folder)
 end
@@ -102,106 +115,8 @@ local function attachChild(parent, child)
 end
 
 local Instance = {}
-Instance.__index = Folder
-function Instance.new(className, parent)
-	local obj = newFolder(className, className)
-	if parent then
-		attachChild(parent, obj)
-	end
-	return obj
-end
-
--- ---------------------------------------------------------------------------
--- Roblox datatype stubs (only what pure-logic modules touch)
--- ---------------------------------------------------------------------------
-local Vector3 = {}
-Vector3.__index = Vector3
-local function newVector3(x, y, z)
-	return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, Vector3)
-end
-Vector3.__add = function(a, b)
-	return newVector3(a.X + b.X, a.Y + b.Y, a.Z + b.Z)
-end
-Vector3.__sub = function(a, b)
-	return newVector3(a.X - b.X, a.Y - b.Y, a.Z - b.Z)
-end
-Vector3.__mul = function(a, b)
-	if type(a) == "number" then
-		return newVector3(a * b.X, a * b.Y, a * b.Z)
-	end
-	if type(b) == "number" then
-		return newVector3(a.X * b, a.Y * b, a.Z * b)
-	end
-	return newVector3(a.X * b.X, a.Y * b.Y, a.Z * b.Z)
-end
-Vector3.__tostring = function(v)
-	return string.format("%.3f, %.3f, %.3f", v.X, v.Y, v.Z)
-end
-Vector3.__index = function(self, key)
-	if key == "Magnitude" then
-		return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
-	elseif key == "Unit" then
-		local m = math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
-		if m == 0 then
-			return newVector3(0, 0, 0)
-		end
-		return newVector3(self.X / m, self.Y / m, self.Z / m)
-	elseif key == "size" then
-		return nil
-	end
-	return nil
-end
-Vector3.__div = function(a, b)
-	if type(b) == "number" then
-		return newVector3(a.X / b, a.Y / b, a.Z / b)
-	end
-	return newVector3(a.X / b.X, a.Y / b.Y, a.Z / b.Z)
-end
-Vector3.__unm = function(a)
-	return newVector3(-a.X, -a.Y, -a.Z)
-end
-
-local Color3 = {}
-Color3.__index = Color3
-function Color3.fromRGB(r, g, b)
-	return setmetatable({ R = (r or 0) / 255, G = (g or 0) / 255, B = (b or 0) / 255 }, Color3)
-end
-function Color3.new(r, g, b)
-	return setmetatable({ R = r or 0, G = g or 0, B = b or 0 }, Color3)
-end
-
-local Enum = setmetatable({}, {
-	__index = function(self, category)
-		local cat = setmetatable({}, {
-			__index = function(_, key)
-				return setmetatable({ Name = key, Value = 0 }, {
-					__tostring = function(i)
-						return category .. "." .. i.Name
-					end,
-				})
-			end,
-		})
-		rawset(self, category, cat)
-		return cat
-	end,
-})
-
-local CFrame = {}
-CFrame.__index = CFrame
-function CFrame.new(x, y, z)
-	return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, CFrame)
-end
-
-local UDim = {}
-UDim.__index = UDim
-function UDim.new(scale, offset)
-	return setmetatable({ Scale = scale or 0, Offset = offset or 0 }, UDim)
-end
-
-local UDim2 = {}
-UDim2.__index = UDim2
-function UDim2.new(xs, xo, ys, yo)
-	return setmetatable({ X = UDim.new(xs, xo), Y = UDim.new(ys, yo) }, UDim2)
+function Instance.new(className)
+	return rawget(__EMU_GLOBAL, "newInstance")(className)
 end
 
 -- ---------------------------------------------------------------------------
@@ -247,6 +162,9 @@ service("TeleportService")
 service("ReplicatedFirst")
 service("CollectionService")
 service("PhysicsService")
+
+-- Workspace.Terrain: the emulator's recording Terrain object.
+graftChild(Workspace, EMU.Terrain)
 
 attachChild(ReplicatedStorage, newFolder("Folder", "Remotes"))
 attachChild(ReplicatedStorage, newFolder("Folder", "Shared"))
@@ -423,7 +341,13 @@ local loadModule
 
 local function buildEnv(path)
 	local env = setmetatable({}, { __index = function(_, key)
-		return _G[key]
+		local value = _G[key]
+		if value ~= nil then
+			return value
+		end
+		-- Roblox globals (Vector3, Enum, Instance...) are published by the runner
+		-- after this file returns; read them from the bag it hands over.
+		return HarnessGlobals[key]
 	end })
 	env.script = ensureScriptObject(path)
 	env.game = game
@@ -561,16 +485,40 @@ HarnessGlobals.Harness = Harness
 -- ---------------------------------------------------------------------------
 -- Globals visible to module code
 -- ---------------------------------------------------------------------------
+HarnessGlobals.game = game
+HarnessGlobals.workspace = Workspace
 HarnessGlobals.Instance = Instance
-HarnessGlobals.Enum = Enum
-HarnessGlobals.Vector3 = setmetatable({ new = newVector3 }, Vector3)
+HarnessGlobals.Enum = __EMU_GLOBAL.Enum
+local Vector3Globals = { new = __EMU_GLOBAL.newVector3, __emu = __EMU_GLOBAL }
+setmetatable(Vector3Globals, {
+	__index = function(_, key)
+		local class = __EMU_GLOBAL.Vector3Class
+		return class[key]
+	end,
+})
+HarnessGlobals.Vector3 = Vector3Globals
+local CFrameGlobals = { new = __EMU_GLOBAL.CFrame.new, __emu = __EMU_GLOBAL }
+setmetatable(CFrameGlobals, {
+	__index = function(_, key)
+		return __EMU_GLOBAL.CFrame[key]
+	end,
+})
+HarnessGlobals.CFrame = CFrameGlobals
+HarnessGlobals.Color3 = __EMU_GLOBAL.Color3
 HarnessGlobals.Vector2 = { new = function(x, y)
 	return { X = x or 0, Y = y or 0 }
 end }
-HarnessGlobals.Color3 = Color3
-HarnessGlobals.CFrame = CFrame
-HarnessGlobals.UDim = UDim
-HarnessGlobals.UDim2 = UDim2
+HarnessGlobals.UDim = __EMU_GLOBAL.UDim
+HarnessGlobals.UDim2 = __EMU_GLOBAL.UDim2
+HarnessGlobals.PhysicalProperties = { new = function(density, friction, elasticity)
+	return { Density = density, Friction = friction, Elasticity = elasticity }
+end }
+HarnessGlobals.NumberSequence = { new = function(value)
+	return { value = value }
+end }
+HarnessGlobals.ColorSequence = { new = function(color)
+	return { color = color }
+end }
 HarnessGlobals.tick = function()
 	return scheduler.clock
 end
