@@ -81,6 +81,15 @@ for (const [key, value] of Object.entries(loaders[0].toObject())) {
   lua.globals.set(key, value);
 }
 
+// Runtime emulation (Players / DataStore / remotes) for the gameplay suites.
+// Created after the loader so it can see the game tree.
+const runtimeSource = readFileSync(join(here, 'runtime.lua'), 'utf8');
+lua.globals.set(
+  '__runtimeChunk',
+  lua.executeBytecode(lua.compile(`return function(...)\n${runtimeSource}\nend`, 'runtime.lua'))[0],
+);
+lua.execute('__RUNTIME = __runtimeChunk()');
+
 // Create the whole instance tree up-front so require() order never matters.
 lua.execute('Harness.registerModules(__FILE_PATHS)');
 

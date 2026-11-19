@@ -54,7 +54,19 @@ Vector3.__tostring = function(v)
 	return string.format("(%.2f, %.2f, %.2f)", v.X, v.Y, v.Z)
 end
 Vector3.__index = function(self, key)
-	if key == "Cross" then
+	if key == "Dot" then
+		return function(a, b)
+			return a.X * b.X + a.Y * b.Y + a.Z * b.Z
+		end
+	elseif key == "Lerp" then
+		return function(a, b, alpha)
+			return newVector3(
+				a.X + (b.X - a.X) * alpha,
+				a.Y + (b.Y - a.Y) * alpha,
+				a.Z + (b.Z - a.Z) * alpha
+			)
+		end
+	elseif key == "Cross" then
 		return function(a, b)
 			return newVector3(
 				a.Y * b.Z - a.Z * b.Y,
@@ -72,18 +84,6 @@ Vector3.__index = function(self, key)
 		return newVector3(self.X / m, self.Y / m, self.Z / m)
 	end
 	return nil
-end
-
-function Vector3:Lerp(other, alpha)
-	return newVector3(
-		self.X + (other.X - self.X) * alpha,
-		self.Y + (other.Y - self.Y) * alpha,
-		self.Z + (other.Z - self.Z) * alpha
-	)
-end
-
-function Vector3:Dot(other)
-	return self.X * other.X + self.Y * other.Y + self.Z * other.Z
 end
 
 Vector3.static = { new = newVector3 }
@@ -273,6 +273,64 @@ UDim2.fromOffset = function(x, y)
 end
 
 -- ---------------------------------------------------------------------------
+-- Signals (Connect / Fire / Once), used by remotes, prompts and properties
+-- ---------------------------------------------------------------------------
+local SIGNAL_ERRORS = {}
+
+local function newSignal()
+	local handlers = {}
+	local signal = {}
+
+	function signal:Connect(fn)
+		table.insert(handlers, fn)
+		local connection
+		connection = {
+			Connected = true,
+			Disconnect = function()
+				for index, candidate in ipairs(handlers) do
+					if candidate == fn then
+						table.remove(handlers, index)
+						break
+					end
+				end
+				connection.Connected = false
+			end,
+		}
+		return connection
+	end
+
+	function signal:Once(fn)
+		local connection
+		connection = signal:Connect(function(...)
+			connection:Disconnect()
+			fn(...)
+		end)
+		return connection
+	end
+
+	function signal:Fire(...)
+		local snapshot = {}
+		for index, fn in ipairs(handlers) do
+			snapshot[index] = fn
+		end
+		for _, fn in ipairs(snapshot) do
+			local ok, err = pcall(fn, ...)
+			if not ok then
+				-- Surfaces in tests instead of stdout: a handler that throws must
+				-- never be silently swallowed by the harness.
+				table.insert(SIGNAL_ERRORS, tostring(err))
+			end
+		end
+	end
+
+	function signal:GetCount()
+		return #handlers
+	end
+
+	return signal
+end
+
+-- ---------------------------------------------------------------------------
 -- Instances
 -- ---------------------------------------------------------------------------
 local InstanceMeta = {}
@@ -280,11 +338,13 @@ local InstanceMeta = {}
 --- emulated Instances keep it in _props. Both must be readable/registrable.
 local function nameOf(object)
 	local props = rawget(object, "_props")
-	local name = props and props.Name
-	if name == nil then
-		name = rawget(object, "Name")
+	if props then
+		local name = props.Name
+		if name ~= nil then
+			return name
+		end
 	end
-	return name
+	return rawget(object, "Name")
 end
 
 InstanceMeta.__index = function(self, key)
@@ -346,11 +406,18 @@ InstanceMeta.__newindex = function(self, key, value)
 		end
 		rawset(self, "_parent", value)
 		if value then
+			-- Parents may be loader folders (Service objects) which keep children
+			-- in `_childList` plus a `_children` name map instead.
 			local list = rawget(value, "_childList")
-			if list then
-				table.insert(list, self)
+			if list == nil then
+				list = {}
+				rawset(value, "_childList", list)
 			end
+			table.insert(list, self)
 			local byName = rawget(value, "_childrenByName")
+			if byName == nil then
+				byName = rawget(value, "_children")
+			end
 			if byName then
 				byName[nameOf(self)] = self
 			end
@@ -368,6 +435,11 @@ InstanceMeta.__newindex = function(self, key, value)
 		end
 	end
 	rawget(self, "_props")[key] = value
+	local signals = rawget(self, "_propSignals")
+	local signal = signals and signals[key]
+	if signal then
+		signal:Fire(value)
+	end
 end
 
 local DEFAULT_PROPS = {
@@ -415,6 +487,13 @@ local function makeMethods(self)
 		local aliased = rawget(self, "_children")
 		if aliased and aliased[name] then
 			return aliased[name]
+		end
+		-- Children grafted in by the loader keep the name-table on the parent
+		-- only; scan the list as a last resort.
+		for _, child in ipairs(rawget(self, "_childList") or {}) do
+			if nameOf(child) == name then
+				return child
+			end
 		end
 		if recursive then
 			for _, child in ipairs(self:GetDescendants()) do
@@ -492,7 +571,16 @@ local function makeMethods(self)
 	end
 
 	function methods:GetPropertyChangedSignal(prop)
-		local signal = _G.__makeSignal and _G.__makeSignal() or { Connect = function() end, Fire = function() end }
+		local signals = rawget(self, "_propSignals")
+		if signals == nil then
+			signals = {}
+			rawset(self, "_propSignals", signals)
+		end
+		local signal = signals[prop]
+		if signal == nil then
+			signal = newSignal()
+			signals[prop] = signal
+		end
 		return signal
 	end
 
@@ -533,12 +621,45 @@ local function newInstance(className)
 	for key, value in pairs(DEFAULT_PROPS) do
 		rawget(object, "_props")[key] = value
 	end
-	if className == "Part" or className == "Seat" then
+	if className == "Part" or className == "Seat" or className == "MeshPart" then
 		rawget(object, "_props").Size = newVector3(4, 1, 2)
 		rawget(object, "_props").CFrame = newCFrame()
 		rawget(object, "_props").Position = newVector3(0, 0, 0)
+		rawget(object, "_props").Anchored = true
+	end
+	if className == "Seat" then
+		rawget(object, "_props").Occupant = nil
+		rawget(object, "_props").Disabled = false
 	end
 	makeMethods(object)
+
+	-- Remotes: the server->client and client->server channels the game uses.
+	if className == "RemoteEvent" or className == "RemoteFunction" then
+		local object_ = object
+		rawset(object_, "OnServerEvent", newSignal())
+		rawset(object_, "OnClientEvent", newSignal())
+		rawset(object_, "toClient", {})
+		rawset(object_, "toAll", {})
+		local methods = rawget(object_, "_methods")
+		methods.FireClient = function(self, player, payload)
+			table.insert(rawget(self, "toClient"), { player = player, payload = payload })
+			rawget(self, "OnClientEvent"):Fire(payload)
+		end
+		methods.FireAllClients = function(self, payload)
+			table.insert(rawget(self, "toAll"), payload)
+			rawget(self, "OnClientEvent"):Fire(payload)
+		end
+		methods.InvokeClient = function() end
+		methods.FireServer = function(self, player, payload)
+			rawget(self, "OnServerEvent"):Fire(player, payload)
+		end
+	end
+	if className == "ProximityPrompt" then
+		rawset(object, "Triggered", newSignal())
+		rawget(object, "_props").Enabled = true
+		rawget(object, "_props").HoldDuration = 0
+		rawget(object, "_props").MaxActivationDistance = 10
+	end
 	return object
 end
 
@@ -593,6 +714,7 @@ Emulator.Enum = Enum
 Emulator.Instance = Instance
 Emulator.UDim = UDim
 Emulator.UDim2 = UDim2
+Emulator.signalErrors = SIGNAL_ERRORS
 Emulator.newCFrame = newCFrame
 Emulator.newVector3 = newVector3
 Emulator.newInstance = newInstance

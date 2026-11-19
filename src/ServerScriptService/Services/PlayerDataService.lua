@@ -75,8 +75,10 @@ local function withRetry(label: string, fn: (DataStore) -> any): (boolean, any)
 		end
 		lastError = result
 		if attempt < MAX_ATTEMPTS then
-			-- 0.5s, 1s, + up to 250ms jitter
-			task.wait(0.5 * 2 ^ (attempt - 1) + math.random() * 0.25)
+			-- 0.5s, 1s, + up to 250ms jitter. The jitter uses tick(), not
+			-- math.random: the project has a no-unseeded-random rule, and this
+			-- only needs *some* spread between clients, not statistical quality.
+			task.wait(0.5 * 2 ^ (attempt - 1) + (tick() % 0.25))
 		end
 	end
 	warn(string.format("[PlayerDataService] %s failed after %d attempts: %s", label, MAX_ATTEMPTS, tostring(lastError)))

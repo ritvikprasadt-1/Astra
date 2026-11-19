@@ -152,6 +152,9 @@ end
 
 --- Take off: give the ship a small upward impulse and hand physics the root.
 function FlightService.beginFlight(ship: any)
+	-- The takeoff timer starts now, not at server boot: otherwise a ship that
+	-- sat on the pad for a minute would skip straight to Flight on frame one.
+	flight.lastUpdate = os.clock()
 	local root = ship.built.root
 	root.Anchored = false
 	root.AssemblyLinearVelocity = Vector3.new(0, 26, 0)

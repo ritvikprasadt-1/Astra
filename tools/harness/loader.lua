@@ -50,11 +50,11 @@ local function folderIndex(self, key)
 	end
 	if key == "FindFirstChild" then
 		return function(_, name)
-			return rawget(self, "_children")[name]
+			return folderIndex(self, name)
 		end
 	elseif key == "WaitForChild" then
 		return function(_, name)
-			local found = rawget(self, "_children")[name]
+			local found = folderIndex(self, name)
 			if not found then
 				error("WaitForChild timeout: " .. tostring(name), 2)
 			end
@@ -91,6 +91,22 @@ end
 
 local Folder = { __index = folderIndex }
 
+--- Children can live in either the loader's name map or the emulator's, since
+--- services mix `Instance.new` objects with loader folders.
+local function lookupChild(parent, name)
+	local direct = rawget(parent, "_children")
+	local found = direct and direct[name]
+	if found then
+		return found
+	end
+	local byName = rawget(parent, "_childrenByName")
+	found = byName and byName[name]
+	if found then
+		return found
+	end
+	return nil
+end
+
 local EMU = __EMU_GLOBAL
 
 --- Register an emulated Instance (from emulator.lua) as a child of a loader node,
@@ -99,6 +115,9 @@ local function graftChild(parent, child)
 	child.Parent = parent
 	if parent._children then
 		parent._children[child.Name] = child
+	end
+	if parent._childrenByName then
+		parent._childrenByName[child.Name] = child
 	end
 	return child
 end
@@ -157,7 +176,10 @@ service("Players")
 service("RunService")
 service("Lighting")
 service("HttpService")
-service("DataStoreService")
+local DataStoreService = service("DataStoreService")
+DataStoreService.GetDataStore = function()
+	error("DataStoreService is not available in this environment")
+end
 service("TeleportService")
 service("ReplicatedFirst")
 service("CollectionService")
@@ -170,7 +192,6 @@ attachChild(ReplicatedStorage, newFolder("Folder", "Remotes"))
 attachChild(ReplicatedStorage, newFolder("Folder", "Shared"))
 attachChild(ServerStorage, newFolder("Folder", "Templates"))
 
--- ---------------------------------------------------------------------------
 -- Scheduler stub: real coroutines, advanced manually by tests
 -- ---------------------------------------------------------------------------
 local scheduler = { clock = 0, pending = {} }
@@ -271,6 +292,22 @@ function scheduler.advance(seconds, stepSize)
 		scheduler.step(math.min(step, remaining))
 		remaining -= step
 	end
+end
+
+-- ---------------------------------------------------------------------------
+-- RunService: frames are advanced by tests, so each of these is a real signal.
+local RunServiceService = services["RunService"]
+RunServiceService.Heartbeat = makeSignal()
+RunServiceService.RenderStepped = makeSignal()
+RunServiceService.Stepped = makeSignal()
+RunServiceService.IsStudio = function()
+	return true
+end
+RunServiceService.IsServer = function()
+	return true
+end
+RunServiceService.IsClient = function()
+	return false
 end
 
 -- ---------------------------------------------------------------------------
@@ -413,19 +450,21 @@ local function buildEnv(path)
 		end
 		return t
 	end
+	-- Warnings go into a buffer instead of stdout: the CI runner treats stdout
+	-- as a report, and a DataStore-unavailable warning is expected in the suite.
 	env.warn = function(...)
 		local t = {}
 		for i = 1, select("#", ...) do
 			t[i] = tostring((select(i, ...)))
 		end
-		io_write("[warn] " .. table.concat(t, " ") .. "\n")
+		table.insert(Harness.warnings, table.concat(t, " "))
 	end
 	env.print = function(...)
 		local t = {}
 		for i = 1, select("#", ...) do
 			t[i] = tostring((select(i, ...)))
 		end
-		io_write("[lua] " .. table.concat(t, " ") .. "\n")
+		table.insert(Harness.logs, table.concat(t, " "))
 	end
 	return env
 end
@@ -433,6 +472,8 @@ end
 local EMPTY = { __emptyModule = true }
 
 local Harness = {
+	warnings = {},
+	logs = {},
 	game = game,
 	scheduler = scheduler,
 	signal = makeSignal,
@@ -486,6 +527,13 @@ HarnessGlobals.Harness = Harness
 -- Globals visible to module code
 -- ---------------------------------------------------------------------------
 HarnessGlobals.game = game
+-- Roblox service globals that modules reference directly (not via GetService).
+HarnessGlobals.DataStoreService = services["DataStoreService"]
+HarnessGlobals.Players = services["Players"]
+HarnessGlobals.RunService = services["RunService"]
+HarnessGlobals.Workspace = Workspace
+HarnessGlobals.ReplicatedStorage = ReplicatedStorage
+HarnessGlobals.ServerStorage = ServerStorage
 HarnessGlobals.workspace = Workspace
 HarnessGlobals.Instance = Instance
 HarnessGlobals.Enum = __EMU_GLOBAL.Enum
