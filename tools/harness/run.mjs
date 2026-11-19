@@ -93,6 +93,32 @@ lua.execute('__RUNTIME = __runtimeChunk()');
 // Create the whole instance tree up-front so require() order never matters.
 lua.execute('Harness.registerModules(__FILE_PATHS)');
 
+// Source access for contract tests: they assert that the server still sends the
+// exact fields the client reads. JS functions are callable as Luau globals.
+// Source text is handed over as one Luau table (JS callbacks are not callable
+// from inside the VM), keyed by source-relative path.
+const sourceTable = {};
+for (const file of files) sourceTable[file.path] = file.source;
+// Build the table inside Luau: JS objects are re-encoded, not shared.
+lua.globals.set('__SOURCE_KEYS', Object.keys(sourceTable));
+lua.globals.set('__SOURCE_VALUES', Object.values(sourceTable));
+lua.execute(`
+  local source = {}
+  for i = 1, #__SOURCE_KEYS do
+    source[__SOURCE_KEYS[i]] = __SOURCE_VALUES[i]
+  end
+  __SOURCE = source
+`);
+lua.execute(`
+  local source = __SOURCE
+  function readSource(path) return source[path] or "" end
+  -- Source keys are module paths without the .lua extension.
+  local function trimmed(path) return (string.gsub(path, "%.lua$", "")) end
+  function readServerFile(path) return source["ServerScriptService/" .. trimmed(path)] or "" end
+  function readClientFile(path) return source["StarterPlayer/StarterPlayerScripts/" .. trimmed(path)] or "" end
+  function readSharedFile(path) return source["ReplicatedStorage/Shared/" .. trimmed(path)] or "" end
+`);
+
 const describeSource = readFileSync(join(here, 'describe.lua'), 'utf8');
 // Compile test helpers as function handles too (bytecode set() would store a string).
 // describe.lua takes the shared results table as its single argument.

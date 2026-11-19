@@ -51,11 +51,14 @@ local travelBusy: { [number]: boolean } = {}
 
 local handlers: { [string]: Handler } = {}
 
-local function reply(player: Player, op: string, ok: boolean, message: string?, data: any?)
+local function reply(player: Player, op: string, ok: boolean, message: string?, data: any?, rid: any?)
 	local remote = RemoteService.get(RemoteService.names.StateUpdate)
 	remote:FireClient(player, {
 		kind = "ActionResult",
 		op = op,
+		-- rid lets the client match this reply to the exact request it sent, so
+		-- two in-flight requests for the same op never resolve each other.
+		rid = rid,
 		ok = ok,
 		message = message,
 		data = data,
@@ -330,12 +333,12 @@ function ActionRouter.init()
 			if op == "Mine" or op == "Scan" or op == "FlightInput" then
 				return
 			end
-			reply(player, op, false, "Please wait a moment.")
+			reply(player, op, false, "Please wait a moment.", nil, payload.rid)
 			return
 		end
 
 		local ok, message, data = handler(player, payload)
-		reply(player, op, ok and true or false, message, data)
+		reply(player, op, ok and true or false, message, data, payload.rid)
 	end)
 end
 

@@ -92,19 +92,28 @@ function NetController.init()
 		if payload.kind == "ActionResult" then
 			local key = payload.op
 			-- Resolve by request id when the server echoed it, else by op name.
-			local callback = pending[tostring(payload.rid or "")]
-			if callback then
-				pending[tostring(payload.rid)] = nil
-			elseif key then
-				callback = pending[key]
-				pending[key] = nil
+			local callback = nil
+			local connectionKey = nil
+			if payload.rid ~= nil then
+				connectionKey = tostring(payload.rid)
+				callback = pending[connectionKey]
 			end
+			if not callback and key then
+				callback = pending[key]
+				connectionKey = key
+			end
+			if callback and connectionKey then
+				pending[connectionKey] = nil
+			end
+			-- State first: a callback may read ClientState (e.g. fresh cargo).
+			ClientState.apply(payload)
 			if callback then
 				local ok, err = pcall(callback, payload.ok, payload.message, payload.data)
 				if not ok then
 					warn("[NetController] callback error: " .. tostring(err))
 				end
 			end
+			return
 		end
 		ClientState.apply(payload)
 	end)

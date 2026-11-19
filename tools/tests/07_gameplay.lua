@@ -440,6 +440,17 @@ return function(requireModule, phase)
 			expect(result.data.ok).toBe(false)
 		end)
 
+		it("echoes the request id so the client can match the reply", function()
+			-- Two same-op requests in flight must not resolve each other's
+			-- callbacks; the router echoes payload.rid for exactly this reason.
+			settle(20)
+			local payload = { op = "Status", rid = 4242 }
+			action:FireServer(phase.player, payload)
+			local last = state.toClient[#state.toClient]
+			expect(last.payload.rid).toBe(4242)
+			expect(last.payload.op).toBe("Status")
+		end)
+
 		it("answers a Status pull with consistent ship and planet data", function()
 			local status = call(phase.player, "Status")
 			expect(status.ok).toBe(true)
