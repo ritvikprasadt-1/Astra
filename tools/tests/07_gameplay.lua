@@ -182,6 +182,35 @@ return function(requireModule, phase)
 			expect(ship.pilotUserId).toBe(phase.player.UserId)
 		end)
 
+		it("lets only the pilot (or the owner) free the seat, and drops to Landed", function()
+			local ship = phase.ship
+			expect(ship.pilotUserId).toBe(phase.player.UserId)
+			-- A crewmate who is not seated cannot take the controls away.
+			local usurp = call(phase.intruder, "SeatRelease", { shipId = ship.id })
+			expect(usurp.ok).toBe(false)
+			expect(ship.pilotUserId).toBe(phase.player.UserId)
+
+			-- The pilot standing up frees the seat and powers the ship down.
+			settle(20)
+			phase.player.Root.Position = ship.built.pilotSeat.Position
+			local released = call(phase.player, "SeatRelease", { shipId = ship.id })
+			expect(released.ok).toBe(true)
+			expect(ship.pilotUserId).toBeNil()
+			expect(ship.state).toBe("Landed")
+
+			-- Releasing again is a harmless no-op. (Spaced out: the generic
+			-- limiter is deliberately tighter than a human double-tap.)
+			local again = call(phase.player, "SeatRelease", { shipId = ship.id })
+			expect(again.ok).toBe(true)
+			expect(ship.state).toBe("Landed")
+
+			-- Sitting back down returns the ship to Powered for the launch test.
+			phase.player.Root.Position = ship.built.pilotSeat.Position
+			local reseated = call(phase.player, "Seat", { shipId = ship.id })
+			expect(reseated.ok).toBe(true)
+			expect(ship.state).toBe("Powered")
+		end)
+
 		it("transitions Landed -> Boarding -> Powered -> Takeoff only in order", function()
 			local ship = phase.ship
 			expect(ShipStates.canTransition("Landed", "Takeoff")).toBe(false)

@@ -211,6 +211,7 @@ local function buildActionBar(parent: Instance)
 		{ key = "Chart", label = "Chart", hint = "Tab" },
 		{ key = "Workshop", label = "Workshop", hint = "B" },
 		{ key = "Catalog", label = "Catalogue", hint = "C" },
+		{ key = "Stand", label = "Stand", hint = "X" },
 		{ key = "Settings", label = "Settings", hint = "" },
 	}
 
@@ -302,7 +303,10 @@ function HUD.refresh()
 	local planet = state.planet
 	if planet then
 		planetLabel.Text = planet.designation or planet.address or "UNKNOWN"
-		systemLabel.Text = string.format("%s  ·  %s", planet.address or "", state.system or "")
+		-- The server sends the system address as a string; stay defensive so a
+		-- malformed push can never take the whole HUD down.
+		local systemText = if type(state.system) == "string" then state.system else ""
+		systemLabel.Text = string.format("%s  ·  %s", planet.address or "", systemText)
 		planetDetail.Text = string.format(
 			"%s  ·  %d K  ·  %.2f g%s",
 			planet.biomeLabel or "",

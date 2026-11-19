@@ -133,8 +133,8 @@ local function buildActionCluster(parent: Instance): Frame
 	cluster.BackgroundTransparency = 1
 	cluster.AnchorPoint = Vector2.new(1, 1)
 	-- Sits above the HUD action bar so the two do not overlap on a phone.
-	cluster.Position = UDim2.new(1, -Theme.size(12), 1, -Theme.size(300))
-	cluster.Size = UDim2.new(0, Theme.size(92), 0, Theme.size(300))
+	cluster.Position = UDim2.new(1, -Theme.size(12), 1, -Theme.size(348))
+	cluster.Size = UDim2.new(0, Theme.size(92), 0, Theme.size(348))
 	cluster.Parent = parent
 
 	local layout = Instance.new("UIListLayout")
@@ -151,6 +151,7 @@ local function buildActionCluster(parent: Instance): Frame
 		{ key = "Hatch", label = "Hatch", tone = "ghost" },
 		{ key = "Scan", label = "Scan", tone = "default" },
 		{ key = "Console", label = "Console", tone = "ghost" },
+		{ key = "Stand", label = "Stand", tone = "ghost" },
 	}
 	for index, spec in ipairs(buttons) do
 		local button = UIKit.button(cluster, spec.label, spec.tone, function()

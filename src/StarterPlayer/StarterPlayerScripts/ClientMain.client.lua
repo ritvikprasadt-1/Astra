@@ -139,6 +139,35 @@ local function seatPilot()
 	end)
 end
 
+--- Stand up from the pilot seat. Refuses while the ship is off the ground so
+--- nobody can bail out of a moving ship mid-flight.
+local function standUp()
+	local ship = currentShip()
+	if not ship then
+		return
+	end
+	if ship.pilotUserId ~= Players.LocalPlayer.UserId then
+		notify("You are not at the controls.", "info")
+		return
+	end
+	if ship.state == "Takeoff" or ship.state == "Flight" or ship.state == "Landing" then
+		notify("Land the ship before leaving the controls.", "warning")
+		return
+	end
+	FlightController.releaseSeat()
+	local character = Players.LocalPlayer.Character
+	if character then
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local seat = findShipModel() and (findShipModel():FindFirstChild("PilotSeat", true))
+		if root and seat and seat:IsA("BasePart") then
+			-- Step out into the cabin instead of dropping on top of the seat.
+			local offset = seat.CFrame.RightVector * 2.5
+			root.CFrame = CFrame.new(seat.Position + offset)
+		end
+	end
+	notify("You left the pilot seat.", "info")
+end
+
 local function doScan()
 	local ship = currentShip()
 	local piloting = ship and ship.pilotUserId == Players.LocalPlayer.UserId
@@ -219,6 +248,7 @@ HUD.onAction("Inventory", function()
 	InventoryPanel.open(playerGui)
 end)
 HUD.onAction("Workshop", openWorkshop)
+HUD.onAction("Stand", standUp)
 HUD.onAction("Catalog", function()
 	CatalogPanel.open(playerGui)
 end)
@@ -238,13 +268,19 @@ TouchControls.onAction("Descend", descend)
 TouchControls.onAction("Gear", toggleGear)
 TouchControls.onAction("Hatch", toggleHatch)
 TouchControls.onAction("Scan", doScan)
+TouchControls.onAction("Stand", standUp)
 TouchControls.onAction("Console", function()
 	ShipPanel.open(playerGui)
 end)
 
 -- Keyboard / gamepad bindings -> same actions.
 InputController.onAction("Interact", function()
-	-- Context sensitive: near the hatch -> hatch, near the seat -> seat.
+	-- Context sensitive: seated -> stand, else near hatch/seat decides.
+	local seatedShip = currentShip()
+	if seatedShip and seatedShip.pilotUserId == Players.LocalPlayer.UserId then
+		standUp()
+		return
+	end
 	local model = findShipModel()
 	if not model then
 		return
@@ -282,6 +318,7 @@ InputController.onAction("Scan", doScan)
 InputController.onAction("Liftoff", launch)
 InputController.onAction("Descend", descend)
 InputController.onAction("Gear", toggleGear)
+InputController.onAction("Stand", standUp)
 -- Escape / ButtonB are handled once, by Modal.initInput above.
 
 -- 5. Server-driven UI updates ------------------------------------------------

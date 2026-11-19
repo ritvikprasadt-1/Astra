@@ -242,6 +242,8 @@ function ShipService.tryOccupySeat(player: Player, shipId: string): (boolean, st
 	return true, nil
 end
 
+--- Clear the pilot seat. `player` is only used for the "no-op if not seated"
+--- check; the caller has already decided who is allowed to do this.
 function ShipService.releaseSeat(player: Player, shipId: string)
 	local ship = ships[shipId]
 	if not ship then

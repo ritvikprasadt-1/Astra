@@ -315,6 +315,40 @@ RunServiceService.IsClient = function()
 	return false
 end
 
+-- Input services: real signals so client input code can be executed.
+local UserInputServiceService = services["UserInputService"]
+UserInputServiceService.InputBegan = makeSignal()
+UserInputServiceService.InputChanged = makeSignal()
+UserInputServiceService.InputEnded = makeSignal()
+UserInputServiceService.TouchTap = makeSignal()
+UserInputServiceService.TouchEnabled = false
+UserInputServiceService.KeyboardEnabled = true
+UserInputServiceService.GamepadEnabled = true
+UserInputServiceService.MouseEnabled = true
+UserInputServiceService.MouseIconEnabled = true
+UserInputServiceService.VREnabled = false
+UserInputServiceService.GetGamepadState = function()
+	return nil
+end
+UserInputServiceService.GetFocusedTextBox = function()
+	return nil
+end
+UserInputServiceService.GetKeysPressed = function()
+	return {}
+end
+
+local GuiServiceService = services["GuiService"]
+GuiServiceService.MenuOpened = makeSignal()
+GuiServiceService.CoreGuiChanged = makeSignal()
+GuiServiceService.TouchControlsEnabled = false
+GuiServiceService.SelectedObject = nil
+
+local ProximityPromptServiceService = services["ProximityPromptService"]
+ProximityPromptServiceService.PromptTriggered = makeSignal()
+ProximityPromptServiceService.PromptShown = makeSignal()
+ProximityPromptServiceService.PromptHidden = makeSignal()
+ProximityPromptServiceService.Enabled = true
+
 -- TweenService: tweens complete immediately (visual only, never gameplay).
 local TweenServiceService = services["TweenService"]
 TweenServiceService.Create = function()

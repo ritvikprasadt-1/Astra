@@ -88,6 +88,36 @@ handlers.Seat = function(player, payload)
 	return ShipService.tryOccupySeat(player, payload.shipId)
 end
 
+--- Stand up from the pilot seat. Either the seated pilot or the ship owner
+--- may do this (an owner needs a way to free a seat a disconnected pilot left).
+handlers.SeatRelease = function(player, payload)
+	if type(payload) ~= "table" or type(payload.shipId) ~= "string" then
+		return false, "Invalid request."
+	end
+	local ship = ShipService.getShip(payload.shipId)
+	if not ship then
+		return false, "No ship."
+	end
+	local seated = ship.pilotUserId
+	if seated == nil then
+		return true, nil
+	end
+	if seated ~= player.UserId and ship.ownerUserId ~= player.UserId then
+		return false, "Only the pilot can leave the seat."
+	end
+	ShipService.releaseSeat(player, ship.id)
+	-- releaseSeat only clears the seat when the caller is the seated pilot, so
+	-- the owner taking the controls back from a stale occupant clears it here.
+	if ship.pilotUserId and ship.pilotUserId ~= player.UserId then
+		ship.pilotUserId = nil
+		if ship.state == "Powered" then
+			ShipService.transition(ship, "Landed")
+		end
+		ShipService.broadcast()
+	end
+	return true, nil
+end
+
 handlers.Liftoff = function(player, payload)
 	if type(payload) ~= "table" or type(payload.shipId) ~= "string" then
 		return false, "Invalid request."

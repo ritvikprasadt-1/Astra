@@ -108,6 +108,7 @@ do everything; upgrades buy range, speed, cargo and toughness.
 | --- | --- |
 | Walk / look | `WASD` + mouse |
 | Take the pilot seat / use the hatch | `E` (context sensitive, or click the prompt) |
+| Stand up from the pilot seat | `E` again, or `X` |
 | Interact prompt | `E` or click |
 | Throttle / reverse | `W` / `S` |
 | Strafe | `A` / `D` |
@@ -134,6 +135,7 @@ do everything; upgrades buy range, speed, cargo and toughness.
 | Accelerate / brake | `R2` / `L2` |
 | Brake hard | `X` |
 | Interact (seat, hatch, prompt) | `Y` |
+| Stand up from the pilot seat | `X` |
 | Scan | `R1` |
 | Chart | `L1` |
 | Launch | D-pad up |
@@ -145,9 +147,12 @@ do everything; upgrades buy range, speed, cargo and toughness.
 * **Left thumb joystick** (appears while you are the pilot): up/down = throttle,
   left/right = yaw. The readout under it shows the current thrust.
 * **Right-hand cluster** while piloting: `Launch`, `Land`, `Gear`, `Hatch`,
-  `Scan`, `Console` (ship status, crew roles, systems readout).
+  `Scan`, `Console` (ship status, crew roles, systems readout), `Stand`
+  (leave the pilot seat).
 * **Action bar** (bottom right, always visible): Scan, Chart, Workshop,
-  Catalogue, Settings — all sized to the 44 px+ touch target minimum.
+  Catalogue, Stand, Settings — all sized to the 44 px+ touch target minimum.
+* You can only stand up once the ship is back on the ground; the server
+  refuses to free the seat during takeoff, flight or landing.
 * Deposits, the hatch and the seat all use Roblox proximity prompts, which are
   tap-friendly by default.
 * Panels are single-column, scrollable, and respect the device safe area. The
@@ -196,12 +201,16 @@ this build does not claim to have them.
   along).
 * **One pilot at a time.** The seat is a real `Seat`; sitting in it claims the
   controls, standing up releases them. Only a pilot-rated player may sit.
+  Standing up is a server op (`SeatRelease`) that only the seated pilot — or the
+  ship owner, to clear a stale occupant — may call, and it is refused while the
+  ship is in takeoff, flight or landing.
 * Permissions are enforced on the server in `ShipPermissions` — the client UI
   greys out what you cannot do, but the server refuses regardless.
 * Cargo is split: **personal inventory** (per player, what mining pays into) vs
   **ship cargo** (shared, upgraded by cargo modules).
 * A pilot leaving mid-flight hands control back cleanly (the server clears the
-  pilot seat, and the ship holds its last state).
+  pilot seat when the `Seat`'s Occupant empties, and refuses an explicit
+  `SeatRelease` unless the ship is on the ground).
 
 ---
 
@@ -300,10 +309,10 @@ Current result:
 | `04_shipmodel` — module catalogue, blueprint validation | 23 |
 | `05_state` — ship state machine, permissions | 14 |
 | `06_world` — builds a real ship, streams real terrain | 14 |
-| `07_gameplay` — full loop through the real router | 36 |
+| `07_gameplay` — full loop through the real router | 37 |
 | `08_contract` — server/client payload shapes | 19 |
-| `09_client` — state mirror, theme scaling, UI kit | 10 |
-| **total** | **158** |
+| `09_client` — state mirror, theme scaling, UI kit, every panel builds | 17 |
+| **total** | **166** |
 
 `07_gameplay` is the important one: it fires the real `ClientAction` remote at
 the real `ActionRouter` and reads the state the services push back, so it covers

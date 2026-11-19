@@ -55,7 +55,7 @@ return function(requireModule, phase)
 				planetEvents += 1
 			end)
 			ClientState.apply({ kind = "Ship", ship = { id = "SHIP-1", state = "Flight" } })
-			ClientState.apply({ kind = "World", world = { planet = { address = "G1-X" }, system = { id = 1 } } })
+			ClientState.apply({ kind = "World", world = { planet = { address = "G1-X" }, system = "G1-S00000001" } })
 			expect(shipEvents).toBe(1)
 			expect(planetEvents).toBe(1)
 			unsubscribeShip()
@@ -154,6 +154,138 @@ return function(requireModule, phase)
 			end
 			expect(flying.Flight).toBe(true)
 			expect(flying.Warp).toBe(true)
+		end)
+	end)
+
+	describe("Every panel builds against a live GUI tree", function()
+		local Players = game:GetService("Players")
+		local playerGui = Instance.new("Folder")
+		playerGui.Name = "PlayerGui"
+
+		local Theme = load("StarterPlayer/StarterPlayerScripts/UI/Theme")
+		local Modal = load("StarterPlayer/StarterPlayerScripts/UI/Modal")
+		local HUD = load("StarterPlayer/StarterPlayerScripts/UI/HUD")
+		local ChartPanel = load("StarterPlayer/StarterPlayerScripts/UI/ChartPanel")
+		local InventoryPanel = load("StarterPlayer/StarterPlayerScripts/UI/InventoryPanel")
+		local WorkshopPanel = load("StarterPlayer/StarterPlayerScripts/UI/WorkshopPanel")
+		local CatalogPanel = load("StarterPlayer/StarterPlayerScripts/UI/CatalogPanel")
+		local ScannerPanel = load("StarterPlayer/StarterPlayerScripts/UI/ScannerPanel")
+		local ShipPanel = load("StarterPlayer/StarterPlayerScripts/UI/ShipPanel")
+		local SettingsPanel = load("StarterPlayer/StarterPlayerScripts/UI/SettingsPanel")
+		local TouchControls = load("StarterPlayer/StarterPlayerScripts/UI/TouchControls")
+		local ClientState = load("StarterPlayer/StarterPlayerScripts/Controllers/ClientState")
+
+		it("seeds a booted client state before building UI", function()
+			Theme.setViewport(Vector2.new(1280, 720))
+			ClientState.apply({
+				kind = "Bootstrap",
+				config = { materials = Config.MATERIALS },
+				inventory = { Ferrite = 20 },
+				capacity = 240,
+				settings = { showHud = true, invertPitch = false, touchScale = 1 },
+				discoveries = {},
+				scans = {},
+				designs = {},
+				activeDesign = 1,
+				ship = nil,
+				planet = { address = "G1-S00001234-P03", designation = "Test", biomeLabel = "Temperate", systemId = 1234, slot = 3 },
+				world = { systemId = 1234, slot = 3 },
+			})
+			expect(ClientState.get().booted).toBe(true)
+		end)
+
+		it("builds the persistent HUD", function()
+			local ok, err = pcall(function()
+				HUD.build(playerGui)
+			end)
+			expect(err).toBe(nil)
+			HUD.refresh()
+			HUD.toast({ text = "hello", kind = "info" })
+			HUD.flashScan()
+		end)
+
+		it("builds the touch layer and toggles it", function()
+			local ok = pcall(function()
+				TouchControls.build(playerGui)
+				TouchControls.setVisible(true)
+				TouchControls.setVisible(false)
+			end)
+			expect(ok).toBe(true)
+		end)
+
+		it("opens and closes every modal panel without error", function()
+			local openers = {
+				{ name = "Chart", fn = function()
+					ChartPanel.open(playerGui)
+				end },
+				{ name = "Inventory", fn = function()
+					InventoryPanel.open(playerGui)
+				end },
+				{ name = "Workshop", fn = function()
+					WorkshopPanel.open(playerGui)
+				end },
+				{ name = "Catalogue", fn = function()
+					CatalogPanel.open(playerGui)
+				end },
+				{ name = "Ship console", fn = function()
+					ShipPanel.open(playerGui)
+				end },
+				{ name = "Settings", fn = function()
+					SettingsPanel.open(playerGui, {})
+				end },
+			}
+			for _, opener in ipairs(openers) do
+				local ok, err = pcall(opener.fn)
+				if not ok then
+					error("panel failed to open: " .. opener.name .. ": " .. tostring(err))
+				end
+				expect(Modal.isOpen()).toBe(true)
+				Modal.close()
+				expect(Modal.isOpen()).toBe(false)
+			end
+		end)
+
+		it("shows a scan result in the scanner panel", function()
+			ScannerPanel.build(playerGui)
+			local ok = pcall(function()
+				ScannerPanel.showResult({
+					planet = {
+						address = "G1-S00001234-P03",
+						designation = "Kestrel",
+						biomeLabel = "Temperate",
+						description = "Neutral science description.",
+						landmarks = { "Basalt Column" },
+					},
+					profile = { { label = "Radius", value = "6,100 km" } },
+					deposits = { { material = "Ferrite", distance = 12, richness = 3 } },
+				})
+			end)
+			expect(ok).toBe(true)
+			ScannerPanel.hide()
+		end)
+
+		it("only ever has one modal open at a time", function()
+			ChartPanel.open(playerGui)
+			InventoryPanel.open(playerGui)
+			local overlays = 0
+			for _, child in ipairs(playerGui:GetChildren()) do
+				if child.Name == "ModalOverlay" then
+					overlays += 1
+				end
+			end
+			expect(overlays).toBe(1)
+			Modal.close()
+		end)
+
+		it("runs the modal's close hook exactly once", function()
+			local closed = 0
+			local handle = Modal.open(playerGui, "Hook Test", function() end)
+			handle.onClose = function()
+				closed += 1
+			end
+			Modal.close()
+			Modal.close()
+			expect(closed).toBe(1)
 		end)
 	end)
 end

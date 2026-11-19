@@ -95,16 +95,35 @@ function FlightController.init()
 	end)
 end
 
---- Leave the pilot seat locally and tell the server.
+--- Is the local player currently the seated pilot?
+function FlightController.isPilot(): boolean
+	return isLocalPilot()
+end
+
+--- Stand up from the pilot seat.
+---
+--- The client only ever *stops sitting*; the server owns the seat. It clears
+--- `pilotUserId` itself when the Seat's Occupant goes empty, so standing up is
+--- enough physically — but we also send SeatRelease so the seat is freed and
+--- the ship drops back to Landed even if the Occupant signal is missed (for
+--- example when the character is teleported out by a respawn).
 function FlightController.releaseSeat()
-	local character = Players.LocalPlayer.Character
+	local player = Players.LocalPlayer
+	local character = player and player.Character
 	if character then
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			humanoid.Sit = false
 		end
 	end
-	-- The server detects an empty Occupant on the Seat and clears pilotUserId.
+	local ship = ClientState.get().ship
+	if ship and isLocalPilot() then
+		NetController.send("SeatRelease", { shipId = ship.id }, function(ok, message)
+			if not ok and message then
+				warn("[Flight] could not free the pilot seat: " .. message)
+			end
+		end)
+	end
 end
 
 return FlightController

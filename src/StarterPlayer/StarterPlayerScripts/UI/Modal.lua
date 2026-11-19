@@ -25,16 +25,29 @@ type ModalHandle = {
 	content: Frame,
 	close: () -> (),
 	setTitle: (text: string) -> (),
+	onClose: ((() -> ())?),
 }
 
 local current: ModalHandle? = nil
 
---- Close whatever modal is open.
+--- Close whatever modal is open, running its cleanup hook exactly once.
 function Modal.close()
-	if current then
-		current.frame:Destroy()
-		current = nil
+	local handle = current
+	if not handle then
+		return
 	end
+	current = nil
+	-- Cleanup first: a panel may need to restore the camera or destroy
+	-- preview parts before the window disappears.
+	local cleanup = handle.onClose
+	handle.onClose = nil
+	if cleanup then
+		local ok, err = pcall(cleanup)
+		if not ok then
+			warn("[Modal] close handler error: " .. tostring(err))
+		end
+	end
+	handle.frame:Destroy()
 end
 
 function Modal.isOpen(): boolean
@@ -139,6 +152,7 @@ function Modal.open(parent: Instance, title: string, builder: (content: Frame) -
 		setTitle = function(text: string)
 			titleLabel.Text = text
 		end,
+		onClose = nil,
 	}
 	current = handle
 

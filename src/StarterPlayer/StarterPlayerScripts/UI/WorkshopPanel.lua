@@ -546,6 +546,13 @@ function WorkshopPanel.open(parent: Instance)
 			WorkshopController.openDesign(nil)
 		end
 	end)
+	-- Closing the window must tear the preview rig down and hand the camera
+	-- back, whatever closed it (button, Escape, or another modal).
+	if handle then
+		handle.onClose = function()
+			WorkshopPanel.close()
+		end
+	end
 	return handle
 end
 

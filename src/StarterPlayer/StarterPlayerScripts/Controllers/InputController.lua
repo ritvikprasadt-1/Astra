@@ -153,6 +153,7 @@ local ACTION_KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.G] = "Gear",
 	[Enum.KeyCode.L] = "Liftoff",
 	[Enum.KeyCode.K] = "Descend",
+	[Enum.KeyCode.X] = "Stand",
 }
 
 local GAMEPAD_KEYS: { [Enum.KeyCode]: string } = {
@@ -162,6 +163,7 @@ local GAMEPAD_KEYS: { [Enum.KeyCode]: string } = {
 	[Enum.KeyCode.DPadUp] = "Liftoff",
 	[Enum.KeyCode.DPadDown] = "Descend",
 	[Enum.KeyCode.ButtonSelect] = "Inventory",
+	[Enum.KeyCode.ButtonX] = "Stand",
 }
 
 --- Boot input handling. Called once by the client bootstrap.
